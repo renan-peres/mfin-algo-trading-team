@@ -1,6 +1,6 @@
 # Team 8 - Algo Trading (Buy & Hold Strategy)
 
-## Poject Overview
+## Project Overview
 This project implements a Buy and Hold investment strategy using Python, focusing on long-term equity investments. The strategy is designed to select high-quality stocks based on fundamental analysis and optimize the portfolio for maximum returns.
 
 ```mermaid
