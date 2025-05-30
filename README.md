@@ -40,7 +40,7 @@ flowchart TD
     C7 --> C8
     
     %% Portfolio Optimization
-    C8 --> G1[Markowitz Mean Variance Optimization<br/>Sharpe Ratio Maximization]
+    C8 --> G1["Markowitz Mean Variance (Sharpe Ratio Maximization) Model"]
     
     %% Optimization Constraints
     G1 --> CONSTRAINTS[Portfolio Constraints]
