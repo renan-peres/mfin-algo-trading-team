@@ -17,6 +17,7 @@ polars==1.27.1
 duckdb==1.2.2
 pyarrow==19.0.1
 openpyxl==3.1.5
+fastexcel==0.14.0
 great_tables==0.17.0
 lxml==5.4.0
 plotly==6.0.1
@@ -34,3 +35,4 @@ ipyleaflet==0.19.2
 itables==2.3.0
 bt
 ta-lib
+textblob==0.19.0
