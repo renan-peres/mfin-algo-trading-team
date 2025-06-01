@@ -140,9 +140,7 @@ def calculate_technical_indicators(prices_df):
     """
     indicators = {}
     
-    for ticker in prices_df.columns:
-        print(f"Calculating indicators for {ticker}...")
-        
+    for ticker in prices_df.columns:       
         close = prices_df[ticker].dropna()
         if len(close) < 50:  # Skip if insufficient data
             print(f"  ⚠️ Skipping {ticker}: insufficient data ({len(close)} points)")
