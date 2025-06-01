@@ -4,6 +4,22 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List
 import os
+import sys
+from io import StringIO
+
+# For the bt.get() call specifically, you can wrap it with output suppression
+def suppress_output(func, *args, **kwargs):
+    """Run function with suppressed stdout/stderr"""
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    try:
+        sys.stdout = StringIO()
+        sys.stderr = StringIO()
+        result = func(*args, **kwargs)
+        return result
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 def load_and_filter_data(file_path, tickers, start_date, end_date):
     # Convert single ticker (string) to a list if needed
