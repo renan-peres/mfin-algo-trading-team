@@ -20,9 +20,9 @@ flowchart TD
     D1 --> D1_OUT[Historical Price Data]
     
     %% Portfolio Construction Phase
-    C1_OUT --> F[Portfolio Construction Pipeline]
+    C1_OUT --> F[Long-Term Portfolio Construction]
     D1_OUT --> F
-    F --> G[01_portfolio_construction.ipynb]
+    F --> G[01_long_term_portfolio.ipynb]
     
     %% Screening Criteria
     G --> C2[Fundamental Screening Criteria]
