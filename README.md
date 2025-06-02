@@ -11,7 +11,7 @@ flowchart TD
     Title --> A[Data Collection Process]
     A --> B[scrape_tickers.ipynb]
     B --> B1[Scrape S&P 500 Constituents]
-    B1 --> B2[equity_tickers.txt]
+    B1 --> B2[tickers_sp_500.txt]
     
     %% Parallel Data Scraping
     B2 --> C1[scrape_fundamentals.ipynb]

@@ -483,7 +483,7 @@ def run_backtest(quotes, trading_signals, available_tickers):
     }
 
 def best_strategy_analysis(quotes, trading_signals, backtest_data, available_tickers,
-                          min_cagr=0.1, max_volatility=0.3, max_stocks=10):
+                          min_cagr=0.0, max_volatility=0.3, max_stocks=10):
     """
     Analyze best strategies, construct portfolio, and return complete results.
     """
