@@ -6,6 +6,7 @@ from typing import List
 import os
 import sys
 from io import StringIO
+import re
 
 # For the bt.get() call specifically, you can wrap it with output suppression
 def suppress_output(func, *args, **kwargs):
@@ -60,6 +61,27 @@ def load_tickers(file_path: str) -> List[str]:
         print(f"Error loading tickers: {str(e)}")
         return []
     
+def clean_column_names(df):
+    """Clean column names with better handling of camelCase and preserve specific acronyms"""
+    cleaned_columns = []
+    for col in df.columns:
+        # First handle camelCase by inserting spaces before uppercase letters
+        col = re.sub(r'([a-z])([A-Z])', r'\1 \2', col)
+        # Replace underscores with spaces
+        col = col.replace('_', ' ')
+        # Convert to title case
+        col = col.title()
+        
+        # Keep specific acronyms in uppercase
+        acronyms = ['Eps', 'Roe', 'Roa', 'Cagr', 'Ttm', 'Ev/']
+        for acronym in acronyms:
+            col = col.replace(acronym, acronym.upper())
+        
+        cleaned_columns.append(col)
+    df.columns = cleaned_columns
+    return df
+
+
 def export_to_excel(output_file, data_dict):
     """
     Export multiple DataFrames to Excel, merging with existing data if appropriate.

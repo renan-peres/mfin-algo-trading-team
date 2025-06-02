@@ -523,9 +523,6 @@ def best_strategy_analysis(quotes, trading_signals, backtest_data, available_tic
     if selected_tickers:
         selected_best_strategies = {ticker: best_strategies[ticker] for ticker in selected_tickers if ticker in best_strategies}
         best_strategies_df = pd.DataFrame.from_dict(selected_best_strategies, orient='index')
-        print(f"\n📊 Best Strategies for {len(selected_tickers)} Selected Tickers:")
-        from IPython.display import display
-        display(best_strategies_df.sort_values('cagr', ascending=False))
     else:
         print("\n⚠️ No tickers were selected for the portfolio")
     
@@ -545,6 +542,7 @@ def best_strategy_analysis(quotes, trading_signals, backtest_data, available_tic
     return {
         'portfolio_result': portfolio_result,
         'best_strategies': best_strategies,
+        'best_strategies_df': best_strategies_df if 'best_strategies_df' in locals() else None,
         'strategy_comparison': backtest_data['strategy_comparison'],
         'portfolio_stats': portfolio_stats,
         'portfolio_weights': portfolio_weights,
