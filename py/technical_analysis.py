@@ -3,6 +3,8 @@ import bt
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns  
+from itertools import product  
 import warnings, logging, os, sys
 from io import StringIO
 warnings.filterwarnings('ignore')
@@ -555,6 +557,423 @@ def best_strategy_analysis(quotes, trading_signals, backtest_data, available_tic
     }
 
 # ===============================================================================
+# OPTIMIZE STRATEGY PARAMETERS
+# ===============================================================================
+
+
+def optimize_strategy_parameters(quotes, best_strategies_df, selected_tickers, risk_free_rate=0.0433):
+    """
+    Optimize parameters for each strategy type based on the best performing strategies
+    """
+    optimization_results = {}
+    
+    # Define parameter ranges for each strategy
+    parameter_ranges = {
+        'SMA_Cross_Signal': {
+            'short_periods': range(5, 25, 2),   # 5, 7, 9, ..., 23
+            'long_periods': range(20, 55, 5)    # 20, 25, 30, ..., 50
+        },
+        'EMA_Cross_Signal': {
+            'short_periods': range(8, 20, 2),   # 8, 10, 12, ..., 18
+            'long_periods': range(21, 35, 3)    # 21, 24, 27, 30, 33
+        },
+        'RSI_Signal': {
+            'rsi_periods': range(10, 25, 2),    # 10, 12, 14, ..., 22
+            'oversold_levels': range(25, 35, 2), # 25, 27, 29, 31, 33
+            'overbought_levels': range(65, 75, 2) # 65, 67, 69, 71, 73
+        },
+        'ADX_Trend_Signal': {
+            'adx_periods': range(10, 20, 2),    # 10, 12, 14, 16, 18
+            'adx_thresholds': range(20, 35, 5)  # 20, 25, 30
+        }
+    }
+    
+    for ticker in selected_tickers:
+        if ticker not in best_strategies_df.index:
+            print(f"⚠️ Skipping {ticker}: not found in best_strategies_df")
+            continue
+            
+        best_strategy = best_strategies_df.loc[ticker, 'strategy']
+        print(f"\n🔄 Optimizing {best_strategy} parameters for {ticker}...")
+        
+        try:
+            ticker_data = quotes[[ticker]].dropna()
+            if len(ticker_data) < 100:
+                print(f"  ⚠️ Insufficient data for {ticker}")
+                continue
+                
+            if best_strategy == 'SMA_Cross_Signal':
+                results = optimize_sma_parameters(ticker, ticker_data, parameter_ranges['SMA_Cross_Signal'], risk_free_rate)
+            elif best_strategy == 'EMA_Cross_Signal':
+                results = optimize_ema_parameters(ticker, ticker_data, parameter_ranges['EMA_Cross_Signal'], risk_free_rate)
+            elif best_strategy == 'RSI_Signal':
+                results = optimize_rsi_parameters(ticker, ticker_data, parameter_ranges['RSI_Signal'], risk_free_rate)
+            elif best_strategy == 'ADX_Trend_Signal':
+                results = optimize_adx_parameters(ticker, ticker_data, parameter_ranges['ADX_Trend_Signal'], risk_free_rate)
+            else:
+                print(f"  ⚠️ Unknown strategy: {best_strategy}")
+                continue
+                
+            optimization_results[ticker] = results
+            
+        except Exception as e:
+            print(f"  ❌ Error optimizing {ticker}: {str(e)}")
+            continue
+    
+    return optimization_results
+
+def optimize_sma_parameters(ticker, data, param_ranges, risk_free_rate):
+    """Optimize SMA crossover parameters"""
+    results = []
+    
+    for short_period, long_period in product(param_ranges['short_periods'], param_ranges['long_periods']):
+        if short_period >= long_period:  # Skip invalid combinations
+            continue
+            
+        try:
+            # Calculate SMAs
+            sma_short = data[ticker].rolling(short_period).mean()
+            sma_long = data[ticker].rolling(long_period).mean()
+            
+            # Generate signals
+            target_weights = pd.DataFrame(index=data.index, columns=[ticker])
+            target_weights[ticker] = np.where(sma_short > sma_long, 1.0, 
+                                            np.where(sma_short < sma_long, -1.0, 0.0))
+            target_weights = target_weights.fillna(0.0)
+            
+            # Create and run backtest
+            strategy_name = f'SMA_{short_period}_{long_period}'
+            strategy = bt.Strategy(strategy_name, [
+                bt.algos.WeighTarget(target_weights),
+                bt.algos.Rebalance()
+            ])
+            
+            backtest = bt.Backtest(strategy, data)
+            result = bt.run(backtest)
+            
+            # Extract metrics
+            stats = result.stats
+            cagr = stats.loc['cagr', strategy_name] if 'cagr' in stats.index else 0
+            sharpe = stats.loc['daily_sharpe', strategy_name] if 'daily_sharpe' in stats.index else 0
+            max_dd = stats.loc['max_drawdown', strategy_name] if 'max_drawdown' in stats.index else 0
+            volatility = stats.loc['daily_vol', strategy_name] if 'daily_vol' in stats.index else 0
+            
+            results.append({
+                'short_period': short_period,
+                'long_period': long_period,
+                'cagr': cagr,
+                'sharpe_ratio': sharpe,
+                'max_drawdown': max_dd,
+                'volatility': volatility,
+                'strategy_name': strategy_name
+            })
+            
+        except Exception as e:
+            continue
+    
+    results_df = pd.DataFrame(results)
+    if not results_df.empty:
+        best_params = results_df.loc[results_df['sharpe_ratio'].idxmax()]
+        print(f"  ✅ Best SMA params for {ticker}: {best_params['short_period']}/{best_params['long_period']} "
+              f"(Sharpe: {best_params['sharpe_ratio']:.3f})")
+        return {'results_df': results_df, 'best_params': best_params, 'strategy_type': 'SMA_Cross_Signal'}
+    return None
+
+def optimize_ema_parameters(ticker, data, param_ranges, risk_free_rate):
+    """Optimize EMA crossover parameters"""
+    results = []
+    
+    for short_period, long_period in product(param_ranges['short_periods'], param_ranges['long_periods']):
+        if short_period >= long_period:
+            continue
+            
+        try:
+            # Calculate EMAs
+            ema_short = data[ticker].ewm(span=short_period).mean()
+            ema_long = data[ticker].ewm(span=long_period).mean()
+            
+            # Generate signals
+            target_weights = pd.DataFrame(index=data.index, columns=[ticker])
+            target_weights[ticker] = np.where(ema_short > ema_long, 1.0,
+                                            np.where(ema_short < ema_long, -1.0, 0.0))
+            target_weights = target_weights.fillna(0.0)
+            
+            # Create and run backtest
+            strategy_name = f'EMA_{short_period}_{long_period}'
+            strategy = bt.Strategy(strategy_name, [
+                bt.algos.WeighTarget(target_weights),
+                bt.algos.Rebalance()
+            ])
+            
+            backtest = bt.Backtest(strategy, data)
+            result = bt.run(backtest)
+            
+            # Extract metrics
+            stats = result.stats
+            cagr = stats.loc['cagr', strategy_name] if 'cagr' in stats.index else 0
+            sharpe = stats.loc['daily_sharpe', strategy_name] if 'daily_sharpe' in stats.index else 0
+            max_dd = stats.loc['max_drawdown', strategy_name] if 'max_drawdown' in stats.index else 0
+            volatility = stats.loc['daily_vol', strategy_name] if 'daily_vol' in stats.index else 0
+            
+            results.append({
+                'short_period': short_period,
+                'long_period': long_period,
+                'cagr': cagr,
+                'sharpe_ratio': sharpe,
+                'max_drawdown': max_dd,
+                'volatility': volatility,
+                'strategy_name': strategy_name
+            })
+            
+        except Exception as e:
+            continue
+    
+    results_df = pd.DataFrame(results)
+    if not results_df.empty:
+        best_params = results_df.loc[results_df['sharpe_ratio'].idxmax()]
+        print(f"  ✅ Best EMA params for {ticker}: {best_params['short_period']}/{best_params['long_period']} "
+              f"(Sharpe: {best_params['sharpe_ratio']:.3f})")
+        return {'results_df': results_df, 'best_params': best_params, 'strategy_type': 'EMA_Cross_Signal'}
+    return None
+
+def optimize_rsi_parameters(ticker, data, param_ranges, risk_free_rate):
+    """Optimize RSI parameters"""
+    import talib
+    results = []
+    
+    for rsi_period, oversold, overbought in product(
+        param_ranges['rsi_periods'], 
+        param_ranges['oversold_levels'], 
+        param_ranges['overbought_levels']
+    ):
+        if oversold >= overbought:  # Skip invalid combinations
+            continue
+            
+        try:
+            # Calculate RSI
+            rsi = talib.RSI(data[ticker].values, timeperiod=rsi_period)
+            rsi_series = pd.Series(rsi, index=data.index)
+            
+            # Generate signals
+            target_weights = pd.DataFrame(index=data.index, columns=[ticker])
+            target_weights[ticker] = np.where(rsi_series < oversold, 1.0,  # Oversold - Buy
+                                            np.where(rsi_series > overbought, -1.0, 0.0))  # Overbought - Sell
+            target_weights = target_weights.fillna(0.0)
+            
+            # Create and run backtest
+            strategy_name = f'RSI_{rsi_period}_{oversold}_{overbought}'
+            strategy = bt.Strategy(strategy_name, [
+                bt.algos.WeighTarget(target_weights),
+                bt.algos.Rebalance()
+            ])
+            
+            backtest = bt.Backtest(strategy, data)
+            result = bt.run(backtest)
+            
+            # Extract metrics
+            stats = result.stats
+            cagr = stats.loc['cagr', strategy_name] if 'cagr' in stats.index else 0
+            sharpe = stats.loc['daily_sharpe', strategy_name] if 'daily_sharpe' in stats.index else 0
+            max_dd = stats.loc['max_drawdown', strategy_name] if 'max_drawdown' in stats.index else 0
+            volatility = stats.loc['daily_vol', strategy_name] if 'daily_vol' in stats.index else 0
+            
+            results.append({
+                'rsi_period': rsi_period,
+                'oversold_level': oversold,
+                'overbought_level': overbought,
+                'cagr': cagr,
+                'sharpe_ratio': sharpe,
+                'max_drawdown': max_dd,
+                'volatility': volatility,
+                'strategy_name': strategy_name
+            })
+            
+        except Exception as e:
+            continue
+    
+    results_df = pd.DataFrame(results)
+    if not results_df.empty:
+        best_params = results_df.loc[results_df['sharpe_ratio'].idxmax()]
+        print(f"  ✅ Best RSI params for {ticker}: Period {best_params['rsi_period']}, "
+              f"Levels {best_params['oversold_level']}/{best_params['overbought_level']} "
+              f"(Sharpe: {best_params['sharpe_ratio']:.3f})")
+        return {'results_df': results_df, 'best_params': best_params, 'strategy_type': 'RSI_Signal'}
+    return None
+
+def optimize_adx_parameters(ticker, data, param_ranges, risk_free_rate):
+    """Optimize ADX parameters"""
+    import talib
+    results = []
+    
+    for adx_period, adx_threshold in product(param_ranges['adx_periods'], param_ranges['adx_thresholds']):
+        try:
+            # Calculate ADX and DI indicators
+            high = low = close = data[ticker].values  # Using close as proxy
+            adx = talib.ADX(high, low, close, timeperiod=adx_period)
+            plus_di = talib.PLUS_DI(high, low, close, timeperiod=adx_period)
+            minus_di = talib.MINUS_DI(high, low, close, timeperiod=adx_period)
+            
+            adx_series = pd.Series(adx, index=data.index)
+            plus_di_series = pd.Series(plus_di, index=data.index)
+            minus_di_series = pd.Series(minus_di, index=data.index)
+            
+            # Generate signals
+            target_weights = pd.DataFrame(index=data.index, columns=[ticker])
+            target_weights[ticker] = np.where(
+                (adx_series > adx_threshold) & (plus_di_series > minus_di_series), 1.0,
+                np.where((adx_series > adx_threshold) & (minus_di_series > plus_di_series), -1.0, 0.0)
+            )
+            target_weights = target_weights.fillna(0.0)
+            
+            # Create and run backtest
+            strategy_name = f'ADX_{adx_period}_{adx_threshold}'
+            strategy = bt.Strategy(strategy_name, [
+                bt.algos.WeighTarget(target_weights),
+                bt.algos.Rebalance()
+            ])
+            
+            backtest = bt.Backtest(strategy, data)
+            result = bt.run(backtest)
+            
+            # Extract metrics
+            stats = result.stats
+            cagr = stats.loc['cagr', strategy_name] if 'cagr' in stats.index else 0
+            sharpe = stats.loc['daily_sharpe', strategy_name] if 'daily_sharpe' in stats.index else 0
+            max_dd = stats.loc['max_drawdown', strategy_name] if 'max_drawdown' in stats.index else 0
+            volatility = stats.loc['daily_vol', strategy_name] if 'daily_vol' in stats.index else 0
+            
+            results.append({
+                'adx_period': adx_period,
+                'adx_threshold': adx_threshold,
+                'cagr': cagr,
+                'sharpe_ratio': sharpe,
+                'max_drawdown': max_dd,
+                'volatility': volatility,
+                'strategy_name': strategy_name
+            })
+            
+        except Exception as e:
+            continue
+    
+    results_df = pd.DataFrame(results)
+    if not results_df.empty:
+        best_params = results_df.loc[results_df['sharpe_ratio'].idxmax()]
+        print(f"  ✅ Best ADX params for {ticker}: Period {best_params['adx_period']}, "
+              f"Threshold {best_params['adx_threshold']} "
+              f"(Sharpe: {best_params['sharpe_ratio']:.3f})")
+        return {'results_df': results_df, 'best_params': best_params, 'strategy_type': 'ADX_Trend_Signal'}
+    return None
+
+def plot_optimization_heatmaps(optimization_results):
+    """Plot heatmaps for parameter optimization results"""
+    for ticker, results in optimization_results.items():
+        if results is None:
+            continue
+            
+        results_df = results['results_df']
+        strategy_type = results['strategy_type']
+        
+        plt.figure(figsize=(12, 8))
+        
+        if strategy_type in ['SMA_Cross_Signal', 'EMA_Cross_Signal']:
+            # Create pivot table for crossover strategies
+            pivot_table = results_df.pivot_table(
+                values='sharpe_ratio', 
+                index='long_period', 
+                columns='short_period', 
+                fill_value=0
+            )
+            
+            sns.heatmap(pivot_table, annot=True, fmt='.3f', cmap='RdYlGn', 
+                       center=0, cbar_kws={'label': 'Sharpe Ratio'})
+            plt.title(f'{ticker} - {strategy_type} Parameter Optimization\nSharpe Ratio Heatmap')
+            plt.xlabel('Short Period')
+            plt.ylabel('Long Period')
+            
+        elif strategy_type == 'RSI_Signal':
+            # Create separate heatmaps for RSI
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+            
+            # Heatmap 1: RSI Period vs Oversold Level
+            pivot1 = results_df.pivot_table(
+                values='sharpe_ratio',
+                index='oversold_level',
+                columns='rsi_period',
+                fill_value=0
+            )
+            sns.heatmap(pivot1, annot=True, fmt='.3f', cmap='RdYlGn', 
+                       center=0, ax=ax1, cbar_kws={'label': 'Sharpe Ratio'})
+            ax1.set_title(f'{ticker} - RSI Period vs Oversold Level')
+            ax1.set_xlabel('RSI Period')
+            ax1.set_ylabel('Oversold Level')
+            
+            # Heatmap 2: RSI Period vs Overbought Level
+            pivot2 = results_df.pivot_table(
+                values='sharpe_ratio',
+                index='overbought_level',
+                columns='rsi_period',
+                fill_value=0
+            )
+            sns.heatmap(pivot2, annot=True, fmt='.3f', cmap='RdYlGn', 
+                       center=0, ax=ax2, cbar_kws={'label': 'Sharpe Ratio'})
+            ax2.set_title(f'{ticker} - RSI Period vs Overbought Level')
+            ax2.set_xlabel('RSI Period')
+            ax2.set_ylabel('Overbought Level')
+            
+        elif strategy_type == 'ADX_Trend_Signal':
+            # Heatmap for ADX
+            pivot_table = results_df.pivot_table(
+                values='sharpe_ratio',
+                index='adx_threshold',
+                columns='adx_period',
+                fill_value=0
+            )
+            sns.heatmap(pivot_table, annot=True, fmt='.3f', cmap='RdYlGn', 
+                       center=0, cbar_kws={'label': 'Sharpe Ratio'})
+            plt.title(f'{ticker} - ADX Parameter Optimization\nSharpe Ratio Heatmap')
+            plt.xlabel('ADX Period')
+            plt.ylabel('ADX Threshold')
+        
+        plt.tight_layout()
+        plt.show()
+
+def create_optimization_summary(optimization_results):
+    """Create a summary DataFrame of optimization results"""
+    summary_data = []
+    
+    for ticker, results in optimization_results.items():
+        if results is None:
+            continue
+            
+        best_params = results['best_params']
+        strategy_type = results['strategy_type']
+        
+        summary_row = {
+            'Ticker': ticker,
+            'Strategy': strategy_type,
+            'Best_Sharpe': best_params['sharpe_ratio'],
+            'CAGR': best_params['cagr'],
+            'Max_Drawdown': best_params['max_drawdown'],
+            'Volatility': best_params['volatility']
+        }
+        
+        # Add strategy-specific parameters
+        if strategy_type in ['SMA_Cross_Signal', 'EMA_Cross_Signal']:
+            summary_row['Short_Period'] = best_params['short_period']
+            summary_row['Long_Period'] = best_params['long_period']
+        elif strategy_type == 'RSI_Signal':
+            summary_row['RSI_Period'] = best_params['rsi_period']
+            summary_row['Oversold_Level'] = best_params['oversold_level']
+            summary_row['Overbought_Level'] = best_params['overbought_level']
+        elif strategy_type == 'ADX_Trend_Signal':
+            summary_row['ADX_Period'] = best_params['adx_period']
+            summary_row['ADX_Threshold'] = best_params['adx_threshold']
+        
+        summary_data.append(summary_row)
+    
+    return pd.DataFrame(summary_data)
+
+# ===============================================================================
 # PLOTTING FRAMEWORK
 # ===============================================================================
 
@@ -797,3 +1216,222 @@ def create_metrics_subplot(fig, gs, position, data, title, color, is_percentage=
     ax.set_title(title, fontsize=10, weight='bold')
     ax.set_ylabel(''), ax.set_xlabel(''), ax.set_xticklabels([])
     ax.grid(True, alpha=0.3, axis='y')
+
+def plot_parameter_comparison(optimization_summary):
+    """Plot comparison of optimized parameters across tickers using optimization_summary DataFrame"""
+    if optimization_summary.empty:
+        print("No optimization summary data to plot")
+        return
+    
+    # Group by strategy type
+    strategy_groups = optimization_summary.groupby('Strategy')
+    
+    for strategy, group in strategy_groups:
+        plt.figure(figsize=(15, 10))
+        
+        if strategy in ['SMA_Cross_Signal', 'EMA_Cross_Signal']:
+            # Plot for crossover strategies
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle(f'{strategy} - Parameter Optimization Results', fontsize=16, fontweight='bold')
+            
+            # Subplot 1: Short Period vs Sharpe Ratio
+            axes[0,0].bar(group['Ticker'], group['Short_Period'], color='skyblue', alpha=0.7)
+            axes[0,0].set_title('Optimal Short Period by Ticker')
+            axes[0,0].set_ylabel('Short Period')
+            axes[0,0].tick_params(axis='x', rotation=45)
+            
+            # Subplot 2: Long Period vs Sharpe Ratio  
+            axes[0,1].bar(group['Ticker'], group['Long_Period'], color='lightcoral', alpha=0.7)
+            axes[0,1].set_title('Optimal Long Period by Ticker')
+            axes[0,1].set_ylabel('Long Period')
+            axes[0,1].tick_params(axis='x', rotation=45)
+            
+            # Subplot 3: Sharpe Ratio comparison
+            axes[1,0].bar(group['Ticker'], group['Best_Sharpe'], color='lightgreen', alpha=0.7)
+            axes[1,0].set_title('Best Sharpe Ratio by Ticker')
+            axes[1,0].set_ylabel('Sharpe Ratio')
+            axes[1,0].tick_params(axis='x', rotation=45)
+            
+            # Subplot 4: CAGR vs Volatility scatter
+            scatter = axes[1,1].scatter(group['Volatility'], group['CAGR'], 
+                                      c=group['Best_Sharpe'], cmap='RdYlGn', 
+                                      s=100, alpha=0.7)
+            axes[1,1].set_xlabel('Volatility')
+            axes[1,1].set_ylabel('CAGR')
+            axes[1,1].set_title('Risk-Return Profile')
+            plt.colorbar(scatter, ax=axes[1,1], label='Sharpe Ratio')
+            
+            # Add ticker labels to scatter plot
+            for i, ticker in enumerate(group['Ticker']):
+                axes[1,1].annotate(ticker, (group['Volatility'].iloc[i], group['CAGR'].iloc[i]),
+                                 xytext=(5, 5), textcoords='offset points', fontsize=8)
+            
+        elif strategy == 'RSI_Signal':
+            # Plot for RSI strategy
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle(f'{strategy} - Parameter Optimization Results', fontsize=16, fontweight='bold')
+            
+            # RSI Period
+            axes[0,0].bar(group['Ticker'], group['RSI_Period'], color='gold', alpha=0.7)
+            axes[0,0].set_title('Optimal RSI Period by Ticker')
+            axes[0,0].set_ylabel('RSI Period')
+            axes[0,0].tick_params(axis='x', rotation=45)
+            
+            # Oversold Level
+            axes[0,1].bar(group['Ticker'], group['Oversold_Level'], color='orange', alpha=0.7)
+            axes[0,1].set_title('Optimal Oversold Level by Ticker')
+            axes[0,1].set_ylabel('Oversold Level')
+            axes[0,1].tick_params(axis='x', rotation=45)
+            
+            # Overbought Level
+            axes[1,0].bar(group['Ticker'], group['Overbought_Level'], color='red', alpha=0.7)
+            axes[1,0].set_title('Optimal Overbought Level by Ticker')
+            axes[1,0].set_ylabel('Overbought Level')
+            axes[1,0].tick_params(axis='x', rotation=45)
+            
+            # Performance metrics
+            axes[1,1].bar(group['Ticker'], group['Best_Sharpe'], color='lightgreen', alpha=0.7)
+            axes[1,1].set_title('Best Sharpe Ratio by Ticker')
+            axes[1,1].set_ylabel('Sharpe Ratio')
+            axes[1,1].tick_params(axis='x', rotation=45)
+            
+        elif strategy == 'ADX_Trend_Signal':
+            # Plot for ADX strategy
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle(f'{strategy} - Parameter Optimization Results', fontsize=16, fontweight='bold')
+            
+            # ADX Period
+            axes[0,0].bar(group['Ticker'], group['ADX_Period'], color='purple', alpha=0.7)
+            axes[0,0].set_title('Optimal ADX Period by Ticker')
+            axes[0,0].set_ylabel('ADX Period')
+            axes[0,0].tick_params(axis='x', rotation=45)
+            
+            # ADX Threshold
+            axes[0,1].bar(group['Ticker'], group['ADX_Threshold'], color='indigo', alpha=0.7)
+            axes[0,1].set_title('Optimal ADX Threshold by Ticker')
+            axes[0,1].set_ylabel('ADX Threshold')
+            axes[0,1].tick_params(axis='x', rotation=45)
+            
+            # Performance metrics
+            axes[1,0].bar(group['Ticker'], group['Best_Sharpe'], color='lightgreen', alpha=0.7)
+            axes[1,0].set_title('Best Sharpe Ratio by Ticker')
+            axes[1,0].set_ylabel('Sharpe Ratio')
+            axes[1,0].tick_params(axis='x', rotation=45)
+            
+            # Risk-return scatter
+            scatter = axes[1,1].scatter(group['Volatility'], group['CAGR'], 
+                                      c=group['Best_Sharpe'], cmap='RdYlGn', 
+                                      s=100, alpha=0.7)
+            axes[1,1].set_xlabel('Volatility')
+            axes[1,1].set_ylabel('CAGR')
+            axes[1,1].set_title('Risk-Return Profile')
+            plt.colorbar(scatter, ax=axes[1,1], label='Sharpe Ratio')
+            
+            # Add ticker labels
+            for i, ticker in enumerate(group['Ticker']):
+                axes[1,1].annotate(ticker, (group['Volatility'].iloc[i], group['CAGR'].iloc[i]),
+                                 xytext=(5, 5), textcoords='offset points', fontsize=8)
+        
+        plt.tight_layout()
+        plt.show()
+
+def plot_portfolio_performance(optimization_summary):
+    """Plot portfolio performance using optimization_summary DataFrame"""
+    if optimization_summary is None or optimization_summary.empty:
+        print("No optimization summary data to plot")
+        return
+    
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Portfolio Performance Analysis', fontsize=16, fontweight='bold')
+    
+    # Plot 1: Sharpe Ratio by Ticker
+    tickers = optimization_summary['Ticker']
+    sharpe_ratios = optimization_summary['Best_Sharpe']
+    colors = ['green' if x > 1.5 else 'orange' if x > 1.0 else 'red' for x in sharpe_ratios]
+    
+    axes[0,0].bar(tickers, sharpe_ratios, color=colors, alpha=0.7)
+    axes[0,0].set_title('Sharpe Ratio by Ticker')
+    axes[0,0].set_ylabel('Sharpe Ratio')
+    axes[0,0].tick_params(axis='x', rotation=45)
+    axes[0,0].axhline(y=1.0, color='red', linestyle='--', alpha=0.7, label='Threshold')
+    axes[0,0].legend()
+    
+    # Plot 2: CAGR vs Volatility
+    scatter = axes[0,1].scatter(optimization_summary['Volatility'] * 100, 
+                               optimization_summary['CAGR'] * 100,
+                               c=optimization_summary['Best_Sharpe'], 
+                               cmap='RdYlGn', s=100, alpha=0.7)
+    axes[0,1].set_xlabel('Volatility (%)')
+    axes[0,1].set_ylabel('CAGR (%)')
+    axes[0,1].set_title('Risk-Return Profile')
+    plt.colorbar(scatter, ax=axes[0,1], label='Sharpe Ratio')
+    
+    # Add ticker labels
+    for i, ticker in enumerate(optimization_summary['Ticker']):
+        axes[0,1].annotate(ticker, 
+                          (optimization_summary['Volatility'].iloc[i] * 100, 
+                           optimization_summary['CAGR'].iloc[i] * 100),
+                          xytext=(5, 5), textcoords='offset points', fontsize=8)
+    
+    # Plot 3: Strategy Distribution
+    strategy_counts = optimization_summary['Strategy'].value_counts()
+    axes[1,0].pie(strategy_counts.values, labels=strategy_counts.index, autopct='%1.1f%%', startangle=90)
+    axes[1,0].set_title('Strategy Distribution')
+    
+    # Plot 4: Max Drawdown
+    axes[1,1].bar(tickers, optimization_summary['Max_Drawdown'] * 100, 
+                  color='red', alpha=0.7)
+    axes[1,1].set_title('Maximum Drawdown by Ticker')
+    axes[1,1].set_ylabel('Max Drawdown (%)')
+    axes[1,1].tick_params(axis='x', rotation=45)
+    
+    plt.tight_layout()
+    plt.show()
+
+def plot_ticker_signals_with_annotations(quotes, trading_signals, technical_indicators, optimization_summary):
+    """Plot trading signals for tickers using optimization_summary DataFrame"""
+    if optimization_summary is None or optimization_summary.empty:
+        print("No optimization summary data to plot")
+        return
+    
+    tickers_to_plot = optimization_summary['Ticker'].tolist()[:6]  # Plot first 6 tickers
+    
+    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+    fig.suptitle('Trading Signals Analysis', fontsize=16, fontweight='bold')
+    axes = axes.flatten()
+    
+    for i, ticker in enumerate(tickers_to_plot):
+        if ticker.lower() not in quotes.columns:
+            print(f"Ticker {ticker} not found in quotes data")
+            continue
+            
+        # Get ticker data
+        price_data = quotes[ticker.lower()]
+        ticker_row = optimization_summary[optimization_summary['Ticker'] == ticker].iloc[0]
+        strategy = ticker_row['Strategy']
+        
+        # Plot price
+        axes[i].plot(price_data.index, price_data.values, label='Price', linewidth=1)
+        
+        # Add strategy-specific indicators and signals
+        if strategy in ['SMA_Cross_Signal', 'EMA_Cross_Signal'] and ticker.lower() in technical_indicators:
+            indicators = technical_indicators[ticker.lower()]
+            
+            if 'SMA_10' in indicators.columns:
+                axes[i].plot(indicators.index, indicators['SMA_10'], 
+                           label=f'SMA {int(ticker_row["Short_Period"])}', alpha=0.7)
+            if 'SMA_25' in indicators.columns:
+                axes[i].plot(indicators.index, indicators['SMA_25'], 
+                           label=f'SMA {int(ticker_row["Long_Period"])}', alpha=0.7)
+        
+        # Add performance metrics as text
+        axes[i].text(0.02, 0.98, f'Sharpe: {ticker_row["Best_Sharpe"]:.2f}\nCAGR: {ticker_row["CAGR"]*100:.1f}%', 
+                    transform=axes[i].transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        axes[i].set_title(f'{ticker} - {strategy}')
+        axes[i].legend()
+        axes[i].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
