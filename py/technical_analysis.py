@@ -1100,102 +1100,93 @@ def plot_ticker_signals_with_annotations(quotes, trading_signals, technical_indi
     plt.tight_layout()
     plt.show()
 
-def plot_portfolio_performance(analysis_results=None):
-    """Plot portfolio performance chart using the backtest results"""
-    # Accept analysis_results as parameter or use global
-    if analysis_results is None:
-        if 'analysis_results' not in globals():
-            print("Portfolio results not available for plotting")
-            return
-        analysis_results = globals()['analysis_results']
+def plot_portfolio_performance(optimization_summary, quotes=None, selected_tickers=None):
+    """Plot portfolio performance metrics and individual ticker performance"""
     
-    if 'portfolio_result' not in analysis_results:
+    if optimization_summary is None or optimization_summary.empty:
         print("Portfolio results not available for plotting")
         return
-        
-    portfolio_result = analysis_results['portfolio_result']
-    fig = plt.figure(figsize=(32, 35))
-    gs = fig.add_gridspec(2, 4, height_ratios=[4, 1], width_ratios=[2, 1, 1, 1], hspace=0.5, wspace=0.3)
-    ax_main = fig.add_subplot(gs[0, :])
     
-    # Main chart
-    try:
-        portfolio_name = portfolio_result.stats.columns[0]
-        portfolio_data = portfolio_result[portfolio_name]
-        portfolio_returns = (portfolio_data / portfolio_data.iloc[0] - 1) * 100
-        portfolio_returns.plot(ax=ax_main, color='blue', linewidth=2, legend=False)
-        ax_main.set_ylabel('Portfolio Return (%)', fontsize=12)
-    except:
-        try:
-            portfolio_result.plot(ax=ax_main, color='blue', linewidth=2, legend=False)
-            ax_main.set_ylabel('Portfolio Value', fontsize=12)
-        except Exception as e:
-            ax_main.text(0.5, 0.5, f'Chart unavailable\nError: {str(e)}', ha='center', va='center', 
-                        transform=ax_main.transAxes, fontsize=14, 
-                        bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.7))
+    # Create a comprehensive performance dashboard
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Portfolio Performance Analysis', fontsize=16, fontweight='bold')
     
-    ax_main.set_title('Short-Term Portfolio Performance', fontsize=16, weight='bold', pad=20)
-    ax_main.set_xlabel('Date', fontsize=12)
-    ax_main.grid(True, alpha=0.3)
-    ax_main.tick_params(axis='x', rotation=45)
+    # Plot 1: Performance Metrics Comparison
+    ax1 = axes[0, 0]
+    metrics = ['CAGR', 'Volatility', 'Best_Sharpe', 'Max_Drawdown']
+    metric_values = [optimization_summary[col].mean() * 100 if col != 'Best_Sharpe' 
+                    else optimization_summary[col].mean() for col in metrics]
     
-    # Metrics
-    try:
-        portfolio_stats = analysis_results['portfolio_stats']
-        included_tickers = analysis_results.get('included_tickers', [])
-        best_strategies = analysis_results.get('best_strategies', {})
-        
-        # Calculate metrics data
-        if included_tickers and best_strategies:
-            individual_metrics = {k: [best_strategies[t][k] * (100 if k != 'sharpe_ratio' else 1) for t in included_tickers if t in best_strategies]
-                                for k in ['cagr', 'max_drawdown', 'sharpe_ratio', 'volatility']}
-            metrics_data = [([min(m), np.mean(m), max(m)] if m else [portfolio_stats[k] * (100 if k != 'sharpe_ratio' else 1)], title, color) 
-                           for m, k, title, color in [(individual_metrics['cagr'], 'cagr', 'CAGR', 'green'),
-                                                      (individual_metrics['max_drawdown'], 'max_drawdown', 'Drawdown', 'red'),
-                                                      (individual_metrics['sharpe_ratio'], 'sharpe_ratio', 'Sharpe Ratio', 'orange'),
-                                                      (individual_metrics['volatility'], 'volatility', 'Volatility', 'purple')]]
-        else:
-            metrics_data = [(portfolio_stats[k] * (100 if k != 'sharpe_ratio' else 1), title, color)
-                           for k, title, color in [('cagr', 'CAGR', 'green'), ('max_drawdown', 'Drawdown', 'red'),
-                                                  ('sharpe_ratio', 'Sharpe Ratio', 'orange'), ('volatility', 'Volatility', 'purple')]]
-        
-        for i, (data, title, color) in enumerate(metrics_data):
-            create_metrics_subplot(fig, gs, i, data, title, color, i != 2, 2 if i == 2 else 1)
-        
-        # Add metrics text box
-        num_stocks = len(included_tickers)
-        avg_metrics = {k: np.mean([best_strategies[t][k] for t in included_tickers if t in best_strategies]) if included_tickers and best_strategies else portfolio_stats[k] 
-                      for k in ['sharpe_ratio', 'volatility', 'max_drawdown']}
-        
-        metrics_text = f"""Portfolio Composition:
-• Stocks: {num_stocks}
-• Strategy: Technical Signal-Based
-• Weight: Equal-weighted ({100/num_stocks:.1f}% each)
-• Filters: CAGR ≥10%, Volatility ≤30%
-
-📈 Returns:
-• CAGR: {portfolio_stats['cagr']:.2%}
-• Total Return: {portfolio_stats['total_return']:.2%}
-
-⚖️ Risk Metrics (Portfolio Avg):
-• Sharpe Ratio: {avg_metrics['sharpe_ratio']:.2f}
-• Volatility: {avg_metrics['volatility']:.2%}
-• Drawdown: {avg_metrics['max_drawdown']:.2%}"""
-
-        ax_main.text(1.02, 0.98, metrics_text, transform=ax_main.transAxes, va='top', ha='left', fontsize=9,
-                    bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9, edgecolor='gray'))
-        plt.tight_layout(pad=2.0)
-        plt.subplots_adjust(right=0.80)
-            
-    except Exception as e:
-        print(f"Could not add metrics: {e}")
-        for i, (title, color) in enumerate(zip(['CAGR', 'Max Drawdown', 'Sharpe Ratio', 'Volatility'], 
-                                              ['green', 'red', 'orange', 'purple'])):
-            ax = fig.add_subplot(gs[1, i])
-            ax.text(0.5, 0.5, f'{title}\nData Unavailable', ha='center', va='center', 
-                   transform=ax.transAxes, fontsize=12,
-                   bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.7))
+    bars = ax1.bar(metrics, metric_values, color=['green', 'orange', 'blue', 'red'], alpha=0.7)
+    ax1.set_title('Average Portfolio Metrics', fontweight='bold')
+    ax1.set_ylabel('Value (%)')
+    ax1.grid(True, alpha=0.3)
+    
+    # Add value labels on bars
+    for bar, value in zip(bars, metric_values):
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2., height,
+                f'{value:.2f}{"%" if bar.get_x() < 3 else ""}',
+                ha='center', va='bottom', fontweight='bold')
+    
+    # Plot 2: Ticker Performance Ranking
+    ax2 = axes[0, 1]
+    sorted_summary = optimization_summary.sort_values('Best_Sharpe', ascending=True)
+    y_pos = range(len(sorted_summary))
+    
+    bars = ax2.barh(y_pos, sorted_summary['Best_Sharpe'], 
+                    color=plt.cm.RdYlGn([0.3 + 0.7 * (x - sorted_summary['Best_Sharpe'].min()) / 
+                                        (sorted_summary['Best_Sharpe'].max() - sorted_summary['Best_Sharpe'].min()) 
+                                        for x in sorted_summary['Best_Sharpe']]))
+    ax2.set_yticks(y_pos)
+    ax2.set_yticklabels(sorted_summary['Ticker'])
+    ax2.set_xlabel('Sharpe Ratio')
+    ax2.set_title('Ticker Performance Ranking', fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    
+    # Plot 3: Strategy Distribution
+    ax3 = axes[1, 0]
+    strategy_counts = optimization_summary['Strategy'].value_counts()
+    wedges, texts, autotexts = ax3.pie(strategy_counts.values, labels=strategy_counts.index, 
+                                       autopct='%1.1f%%', startangle=90)
+    ax3.set_title('Strategy Distribution', fontweight='bold')
+    
+    # Plot 4: Risk-Return Scatter
+    ax4 = axes[1, 1]
+    scatter = ax4.scatter(optimization_summary['Volatility'] * 100, 
+                         optimization_summary['CAGR'] * 100,
+                         c=optimization_summary['Best_Sharpe'], 
+                         cmap='RdYlGn', s=100, alpha=0.7, edgecolors='black')
+    
+    # Add ticker labels
+    for i, ticker in enumerate(optimization_summary['Ticker']):
+        ax4.annotate(ticker, 
+                    (optimization_summary['Volatility'].iloc[i] * 100, 
+                     optimization_summary['CAGR'].iloc[i] * 100),
+                    xytext=(5, 5), textcoords='offset points', fontsize=8)
+    
+    ax4.set_xlabel('Volatility (%)')
+    ax4.set_ylabel('CAGR (%)')
+    ax4.set_title('Risk-Return Profile', fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax4)
+    cbar.set_label('Sharpe Ratio')
+    
+    plt.tight_layout()
     plt.show()
+    
+    # Print summary statistics
+    print(f"\n📊 Portfolio Summary:")
+    print(f"  • Number of stocks: {len(optimization_summary)}")
+    print(f"  • Average CAGR: {optimization_summary['CAGR'].mean()*100:.2f}%")
+    print(f"  • Average Volatility: {optimization_summary['Volatility'].mean()*100:.2f}%")
+    print(f"  • Average Sharpe Ratio: {optimization_summary['Best_Sharpe'].mean():.3f}")
+    print(f"  • Average Max Drawdown: {optimization_summary['Max_Drawdown'].mean()*100:.2f}%")
+    
+    best_performer = optimization_summary.loc[optimization_summary['Best_Sharpe'].idxmax()]
+    print(f"  • Best performer: {best_performer['Ticker']} (Sharpe: {best_performer['Best_Sharpe']:.3f})")
 
 def create_metrics_subplot(fig, gs, position, data, title, color, is_percentage=True, decimal_places=1):
     """Helper function to create consistent metric subplots"""
@@ -1335,103 +1326,217 @@ def plot_parameter_comparison(optimization_summary):
         plt.tight_layout()
         plt.show()
 
-def plot_portfolio_performance(optimization_summary):
-    """Plot portfolio performance using optimization_summary DataFrame"""
-    if optimization_summary is None or optimization_summary.empty:
-        print("No optimization summary data to plot")
-        return
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Portfolio Performance Analysis', fontsize=16, fontweight='bold')
-    
-    # Plot 1: Sharpe Ratio by Ticker
-    tickers = optimization_summary['Ticker']
-    sharpe_ratios = optimization_summary['Best_Sharpe']
-    colors = ['green' if x > 1.5 else 'orange' if x > 1.0 else 'red' for x in sharpe_ratios]
-    
-    axes[0,0].bar(tickers, sharpe_ratios, color=colors, alpha=0.7)
-    axes[0,0].set_title('Sharpe Ratio by Ticker')
-    axes[0,0].set_ylabel('Sharpe Ratio')
-    axes[0,0].tick_params(axis='x', rotation=45)
-    axes[0,0].axhline(y=1.0, color='red', linestyle='--', alpha=0.7, label='Threshold')
-    axes[0,0].legend()
-    
-    # Plot 2: CAGR vs Volatility
-    scatter = axes[0,1].scatter(optimization_summary['Volatility'] * 100, 
-                               optimization_summary['CAGR'] * 100,
-                               c=optimization_summary['Best_Sharpe'], 
-                               cmap='RdYlGn', s=100, alpha=0.7)
-    axes[0,1].set_xlabel('Volatility (%)')
-    axes[0,1].set_ylabel('CAGR (%)')
-    axes[0,1].set_title('Risk-Return Profile')
-    plt.colorbar(scatter, ax=axes[0,1], label='Sharpe Ratio')
-    
-    # Add ticker labels
-    for i, ticker in enumerate(optimization_summary['Ticker']):
-        axes[0,1].annotate(ticker, 
-                          (optimization_summary['Volatility'].iloc[i] * 100, 
-                           optimization_summary['CAGR'].iloc[i] * 100),
-                          xytext=(5, 5), textcoords='offset points', fontsize=8)
-    
-    # Plot 3: Strategy Distribution
-    strategy_counts = optimization_summary['Strategy'].value_counts()
-    axes[1,0].pie(strategy_counts.values, labels=strategy_counts.index, autopct='%1.1f%%', startangle=90)
-    axes[1,0].set_title('Strategy Distribution')
-    
-    # Plot 4: Max Drawdown
-    axes[1,1].bar(tickers, optimization_summary['Max_Drawdown'] * 100, 
-                  color='red', alpha=0.7)
-    axes[1,1].set_title('Maximum Drawdown by Ticker')
-    axes[1,1].set_ylabel('Max Drawdown (%)')
-    axes[1,1].tick_params(axis='x', rotation=45)
-    
-    plt.tight_layout()
-    plt.show()
-
 def plot_ticker_signals_with_annotations(quotes, trading_signals, technical_indicators, optimization_summary):
     """Plot trading signals for tickers using optimization_summary DataFrame"""
     if optimization_summary is None or optimization_summary.empty:
         print("No optimization summary data to plot")
         return
     
-    tickers_to_plot = optimization_summary['Ticker'].tolist()[:6]  # Plot first 6 tickers
+    # Sort by Sharpe ratio in descending order and take first 6 tickers
+    sorted_optimization_summary = optimization_summary.sort_values('Best_Sharpe', ascending=False)
+    tickers_to_plot = sorted_optimization_summary['Ticker'].tolist()[:6]  # Plot first 6 tickers with highest Sharpe
     
-    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
-    fig.suptitle('Trading Signals Analysis', fontsize=16, fontweight='bold')
+    fig, axes = plt.subplots(3, 1, figsize=(18, 16))
+    fig.suptitle('Trading Signals Model Testing (Ordered by Sharpe Ratio)', fontsize=16, fontweight='bold')
     axes = axes.flatten()
     
     for i, ticker in enumerate(tickers_to_plot):
-        if ticker.lower() not in quotes.columns:
+        # Check ticker in quotes
+        ticker_key = None
+        if ticker.lower() in quotes.columns:
+            ticker_key = ticker.lower()
+        elif ticker.upper() in quotes.columns:
+            ticker_key = ticker.upper()
+        elif ticker in quotes.columns:
+            ticker_key = ticker
+        
+        if ticker_key is None:
             print(f"Ticker {ticker} not found in quotes data")
+            axes[i].text(0.5, 0.5, f'Ticker {ticker}\nNot Found', ha='center', va='center', 
+                        transform=axes[i].transAxes, fontsize=12,
+                        bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.7))
             continue
             
-        # Get ticker data
-        price_data = quotes[ticker.lower()]
-        ticker_row = optimization_summary[optimization_summary['Ticker'] == ticker].iloc[0]
-        strategy = ticker_row['Strategy']
-        
-        # Plot price
-        axes[i].plot(price_data.index, price_data.values, label='Price', linewidth=1)
-        
-        # Add strategy-specific indicators and signals
-        if strategy in ['SMA_Cross_Signal', 'EMA_Cross_Signal'] and ticker.lower() in technical_indicators:
-            indicators = technical_indicators[ticker.lower()]
+        try:
+            # Get ticker data and optimization parameters
+            price_data = quotes[ticker_key].dropna()
+            ticker_row = sorted_optimization_summary[sorted_optimization_summary['Ticker'] == ticker].iloc[0]
+            strategy = ticker_row['Strategy']
             
-            if 'SMA_10' in indicators.columns:
-                axes[i].plot(indicators.index, indicators['SMA_10'], 
-                           label=f'SMA {int(ticker_row["Short_Period"])}', alpha=0.7)
-            if 'SMA_25' in indicators.columns:
-                axes[i].plot(indicators.index, indicators['SMA_25'], 
-                           label=f'SMA {int(ticker_row["Long_Period"])}', alpha=0.7)
-        
-        # Add performance metrics as text
-        axes[i].text(0.02, 0.98, f'Sharpe: {ticker_row["Best_Sharpe"]:.2f}\nCAGR: {ticker_row["CAGR"]*100:.1f}%', 
-                    transform=axes[i].transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
-        
-        axes[i].set_title(f'{ticker} - {strategy}')
-        axes[i].legend()
-        axes[i].grid(True, alpha=0.3)
+            # Plot price
+            axes[i].plot(price_data.index, price_data.values, label='Price', linewidth=2, color='black')
+            
+            # Calculate indicators on-the-fly using optimized parameters
+            if strategy in ['SMA_Cross_Signal', 'EMA_Cross_Signal']:
+                short_period = int(ticker_row['Short_Period'])
+                long_period = int(ticker_row['Long_Period'])
+                
+                if strategy == 'SMA_Cross_Signal':
+                    # Calculate SMA with optimized parameters
+                    short_ma = price_data.rolling(window=short_period).mean()
+                    long_ma = price_data.rolling(window=long_period).mean()
+                    
+                    # Plot moving averages
+                    axes[i].plot(short_ma.index, short_ma.values, 
+                               label=f'SMA {short_period}', alpha=0.7, color='blue')
+                    axes[i].plot(long_ma.index, long_ma.values, 
+                               label=f'SMA {long_period}', alpha=0.7, color='orange')
+                    
+                elif strategy == 'EMA_Cross_Signal':
+                    # Calculate EMA with optimized parameters
+                    short_ma = price_data.ewm(span=short_period).mean()
+                    long_ma = price_data.ewm(span=long_period).mean()
+                    
+                    # Plot moving averages
+                    axes[i].plot(short_ma.index, short_ma.values, 
+                               label=f'EMA {short_period}', alpha=0.7, color='green')
+                    axes[i].plot(long_ma.index, long_ma.values, 
+                               label=f'EMA {long_period}', alpha=0.7, color='red')
+                
+                # Generate crossover signals
+                optimized_signals = pd.Series(index=price_data.index, dtype=float)
+                optimized_signals[:] = 0
+                
+                # Create signals based on crossover
+                short_above_long = short_ma > long_ma
+                optimized_signals[short_above_long] = 1
+                optimized_signals[~short_above_long] = -1
+                
+                # Find signal changes (crossover points)
+                signal_changes = optimized_signals.diff()
+                
+                # Plot buy signals (short MA crosses above long MA)
+                buy_signals = signal_changes[signal_changes > 0]
+                buy_count = 0
+                for date in buy_signals.index:
+                    if date in short_ma.index and date in long_ma.index and not pd.isna(short_ma[date]) and not pd.isna(long_ma[date]):
+                        # Calculate crossover point (average of short and long MA at crossover)
+                        crossover_price = (short_ma[date] + long_ma[date]) / 2
+                        axes[i].scatter(date, crossover_price, color='green', marker='^', s=100, alpha=0.8, zorder=5)
+                        axes[i].annotate('BUY', xy=(date, crossover_price), xytext=(10, 20), 
+                                       textcoords='offset points', fontsize=8, fontweight='bold', 
+                                       color='green', ha='left', va='bottom',
+                                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                               edgecolor='green', alpha=0.9),
+                                       arrowprops=dict(arrowstyle='->', color='green', alpha=0.7))
+                        buy_count += 1
+                
+                # Plot sell signals (short MA crosses below long MA)
+                sell_signals = signal_changes[signal_changes < 0]
+                sell_count = 0
+                for date in sell_signals.index:
+                    if date in short_ma.index and date in long_ma.index and not pd.isna(short_ma[date]) and not pd.isna(long_ma[date]):
+                        # Calculate crossover point (average of short and long MA at crossover)
+                        crossover_price = (short_ma[date] + long_ma[date]) / 2
+                        axes[i].scatter(date, crossover_price, color='red', marker='v', s=100, alpha=0.8, zorder=5)
+                        axes[i].annotate('SELL', xy=(date, crossover_price), xytext=(10, -20), 
+                                       textcoords='offset points', fontsize=8, fontweight='bold', 
+                                       color='red', ha='left', va='top',
+                                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                               edgecolor='red', alpha=0.9),
+                                       arrowprops=dict(arrowstyle='->', color='red', alpha=0.7))
+                        sell_count += 1
+                
+                # Strategy parameters for title
+                param_info = f'({short_period} | {long_period})'
+                
+            else:
+                param_info = '(No params)'
+                buy_count = 0
+                sell_count = 0
+            
+            # Create comprehensive title with performance metrics and strategy parameters
+            cagr = ticker_row['CAGR'] * 100  # Convert to percentage
+            volatility = ticker_row['Volatility'] * 100  # Convert to percentage
+            sharpe = ticker_row['Best_Sharpe']
+            max_dd = ticker_row['Max_Drawdown'] * 100  # Convert to percentage
+            
+            title = (f'{ticker} - {strategy} {param_info}\n'
+                    f'CAGR: {cagr:.2f}% | Vol: {volatility:.2f}% | Sharpe: {sharpe:.2f} | Max DD: {max_dd:.2f}%\n'
+                    f'Signals: {buy_count} Long, {sell_count} Short')
+            
+            axes[i].set_title(title, fontsize=10, fontweight='bold')
+            axes[i].legend(loc='upper left', fontsize=8)
+            axes[i].grid(True, alpha=0.3)
+            axes[i].tick_params(axis='x', rotation=45, labelsize=8)
+            
+        except Exception as e:
+            print(f"Error plotting {ticker}: {str(e)}")
+            axes[i].text(0.5, 0.5, f'Error plotting {ticker}\n{str(e)}', 
+                        ha='center', va='center', transform=axes[i].transAxes, 
+                        bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.7))
+    
+    # Hide unused subplots
+    for idx in range(len(tickers_to_plot), len(axes)):
+        axes[idx].set_visible(False)
+    
+    plt.tight_layout()
+    plt.show()
+    
+def plot_optimization_metrics(optimization_summary):
+    """Plot distribution of optimization metrics"""
+    if optimization_summary.empty:
+        print("No optimization summary data to plot")
+        return
+    
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    fig.suptitle('Parameter Optimization - Performance Metrics Distribution', fontsize=16, fontweight='bold')
+    
+    # Sharpe Ratio distribution
+    axes[0,0].hist(optimization_summary['Best_Sharpe'], bins=10, color='skyblue', alpha=0.7, edgecolor='black')
+    axes[0,0].set_title('Sharpe Ratio Distribution')
+    axes[0,0].set_xlabel('Sharpe Ratio')
+    axes[0,0].set_ylabel('Frequency')
+    axes[0,0].axvline(optimization_summary['Best_Sharpe'].mean(), color='red', linestyle='--', 
+                     label=f'Mean: {optimization_summary["Best_Sharpe"].mean():.3f}')
+    axes[0,0].legend()
+    
+    # CAGR distribution
+    axes[0,1].hist(optimization_summary['CAGR'] * 100, bins=10, color='lightgreen', alpha=0.7, edgecolor='black')
+    axes[0,1].set_title('CAGR Distribution')
+    axes[0,1].set_xlabel('CAGR (%)')
+    axes[0,1].set_ylabel('Frequency')
+    axes[0,1].axvline(optimization_summary['CAGR'].mean() * 100, color='red', linestyle='--',
+                     label=f'Mean: {optimization_summary["CAGR"].mean()*100:.2f}%')
+    axes[0,1].legend()
+    
+    # Volatility distribution
+    axes[0,2].hist(optimization_summary['Volatility'] * 100, bins=10, color='orange', alpha=0.7, edgecolor='black')
+    axes[0,2].set_title('Volatility Distribution')
+    axes[0,2].set_xlabel('Volatility (%)')
+    axes[0,2].set_ylabel('Frequency')
+    axes[0,2].axvline(optimization_summary['Volatility'].mean() * 100, color='red', linestyle='--',
+                     label=f'Mean: {optimization_summary["Volatility"].mean()*100:.2f}%')
+    axes[0,2].legend()
+    
+    # Max Drawdown distribution
+    axes[1,0].hist(optimization_summary['Max_Drawdown'] * 100, bins=10, color='red', alpha=0.7, edgecolor='black')
+    axes[1,0].set_title('Max Drawdown Distribution')
+    axes[1,0].set_xlabel('Max Drawdown (%)')
+    axes[1,0].set_ylabel('Frequency')
+    axes[1,0].axvline(optimization_summary['Max_Drawdown'].mean() * 100, color='darkred', linestyle='--',
+                     label=f'Mean: {optimization_summary["Max_Drawdown"].mean()*100:.2f}%')
+    axes[1,0].legend()
+    
+    # Strategy type distribution
+    strategy_counts = optimization_summary['Strategy'].value_counts()
+    axes[1,1].pie(strategy_counts.values, labels=strategy_counts.index, autopct='%1.1f%%', startangle=90)
+    axes[1,1].set_title('Strategy Type Distribution')
+    
+    # Risk-Return scatter for all strategies
+    colors = ['red', 'blue', 'green', 'orange']
+    strategies = optimization_summary['Strategy'].unique()
+    
+    for i, strategy in enumerate(strategies):
+        strategy_data = optimization_summary[optimization_summary['Strategy'] == strategy]
+        axes[1,2].scatter(strategy_data['Volatility'] * 100, strategy_data['CAGR'] * 100, 
+                         c=colors[i % len(colors)], label=strategy, s=60, alpha=0.7)
+    
+    axes[1,2].set_xlabel('Volatility (%)')
+    axes[1,2].set_ylabel('CAGR (%)')
+    axes[1,2].set_title('Risk-Return Profile by Strategy')
+    axes[1,2].legend()
+    axes[1,2].grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.show()
