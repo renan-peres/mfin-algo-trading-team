@@ -1262,7 +1262,7 @@ def find_optimal_portfolio_with_parameter_optimization(quotes, min_cagr=0.0, max
 # PLOTTING
 # ===============================================================================
 
-def plot_complete_strategy_analysis(optimization_results, quotes, training_set, test_set):
+def plot_complete_strategy_analysis(optimization_results, quotes, training_set, test_set, cols=2, rows=None):
     """
     Complete function to generate and plot optimized trading signals for full dataset.
     
@@ -1276,6 +1276,10 @@ def plot_complete_strategy_analysis(optimization_results, quotes, training_set, 
         Training period data for background coloring
     test_set : pd.DataFrame
         Test period data for background coloring
+    cols : int, default=2
+        Number of columns for subplot layout
+    rows : int, optional
+        Number of rows for subplot layout. If None, calculated automatically
     """
     import pandas as pd
     import numpy as np
@@ -1374,7 +1378,7 @@ def plot_complete_strategy_analysis(optimization_results, quotes, training_set, 
     print(f"✅ Generated optimized signals for {len(full_technical_indicators)} tickers")
     
     # Plot the results
-    def plot_ticker_signals_with_annotations(quotes, trading_signals, technical_indicators, best_strategies, included_tickers):
+    def plot_ticker_signals_with_annotations(quotes, trading_signals, technical_indicators, best_strategies, included_tickers, cols=2, rows=None):
         """Plot individual ticker charts with signals and technical indicators for included tickers only"""
         if not included_tickers:
             print("❌ No tickers available for plotting (none passed the CAGR and volatility thresholds)")
@@ -1382,9 +1386,12 @@ def plot_complete_strategy_analysis(optimization_results, quotes, training_set, 
         
         print(f"📊 Plotting {len(included_tickers)} tickers that passed the thresholds")
         
-        cols = min(2, len(included_tickers))
-        rows = (len(included_tickers) + cols - 1) // cols
-        fig, axes = plt.subplots(rows, cols, figsize=(16, 6*rows))
+        # Calculate layout dimensions
+        cols = min(cols, len(included_tickers))
+        if rows is None:
+            rows = (len(included_tickers) + cols - 1) // cols
+        
+        fig, axes = plt.subplots(rows, cols, figsize=(8*cols, 6*rows))
         axes_flat = [axes] if len(included_tickers) == 1 else axes.flatten()
         
         def plot_signals_and_indicators(ax, ticker, indicators, signals, strategy_info):
@@ -1563,12 +1570,12 @@ def plot_complete_strategy_analysis(optimization_results, quotes, training_set, 
         plt.tight_layout()
         plt.show()
     
-    # Plot the strategy signals
+    # Plot the strategy signals with customizable layout
     print(f"\n📈 Strategy Signals by Ticker:")
     print(f"📋 Included tickers: {optimization_summary['Ticker'].tolist()}")
     plot_ticker_signals_with_annotations(
         quotes, full_trading_signals, full_technical_indicators, 
-        optimization_summary, selected_tickers
+        optimization_summary, selected_tickers, cols=cols, rows=rows
     )
     
     print("\n✅ Chart generation complete!")
