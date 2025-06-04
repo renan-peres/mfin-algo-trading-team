@@ -36,3 +36,4 @@ itables==2.3.0
 bt
 ta-lib
 textblob==0.19.0
+pytest==8.4.0
