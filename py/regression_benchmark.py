@@ -184,47 +184,83 @@ def analyze_benchmark_regression(benchmark_excess_returns_df, stock_excess_retur
     
     return regression_results
 
-def plot_benchmark_analysis(regression_results, best_benchmark):
-    """Create scatter plots and comprehensive dashboard."""
+def plot_benchmark_analysis(regression_results, best_benchmark, cols=None, rows=None, subplots=True, benchmark_sectors_df=None, portfolio_df=None):
+    """Create scatter plots and comprehensive dashboard with customizable layout."""
     
     n_stocks = len(regression_results)
-    cols = 3 if n_stocks > 6 else 2 if n_stocks > 2 else 1
-    rows = (n_stocks + cols - 1) // cols
     
-    # Scatter plots
-    fig, axes = plt.subplots(rows, cols, figsize=(6*cols, 5*rows))
-    if n_stocks == 1: axes = [axes]
-    elif rows == 1 and cols > 1: axes = axes if isinstance(axes, (list, np.ndarray)) else [axes]
-    elif rows > 1: axes = axes.flatten()
-    else: axes = [axes]
+    # Check if there are any regression results
+    if n_stocks == 0:
+        print("❌ No regression results to display. Check your data alignment.")
+        return pd.DataFrame()
     
-    for i, (ticker, results) in enumerate(regression_results.items()):
-        if i >= len(axes): continue
-        ax = axes[i]
+    # Only create scatter plots if subplots=True
+    if subplots:
+        # Handle layout parameters
+        if cols is not None and rows is not None:
+            # Use specified grid dimensions
+            total_subplots = cols * rows
+            if total_subplots < n_stocks:
+                print(f"Warning: Grid {rows}x{cols} = {total_subplots} subplots < {n_stocks} stocks. Some plots may be missing.")
+        elif cols is not None:
+            # Use specified columns, calculate rows
+            rows = (n_stocks + cols - 1) // cols
+        elif rows is not None:
+            # Use specified rows, calculate columns  
+            cols = (n_stocks + rows - 1) // rows
+        else:
+            # Auto-calculate layout (original behavior)
+            cols = 3 if n_stocks > 6 else 2 if n_stocks > 2 else 1
+            rows = (n_stocks + cols - 1) // cols
         
-        x, y = results['benchmark_returns'].values, results['stock_returns'].values
-        beta, r_squared, p_value, weight = results['beta'], results['r_squared'], results['p_value_regression'], results['portfolio_weight']
+        # Ensure minimum of 1 row and 1 column
+        rows = max(1, rows)
+        cols = max(1, cols)
         
-        ax.scatter(x, y, alpha=0.6, s=40, color='blue', edgecolors='black', linewidth=0.5)
-        x_line = np.linspace(x.min(), x.max(), 100)
-        ax.plot(x_line, beta * x_line + results['alpha'], color='red', linewidth=2, label=f'β = {beta:.3f}')
+        # Scatter plots
+        fig, axes = plt.subplots(rows, cols, figsize=(6*cols, 5*rows))
         
-        significance = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else ""
-        ax.set_title(f'{ticker} vs {best_benchmark}\nR² = {r_squared:.4f}, p = {p_value:.4f}{significance}', fontsize=11, pad=10)
-        ax.set_xlabel(f'{best_benchmark} Excess Returns')
-        ax.set_ylabel(f'{ticker} Excess Returns')
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc='upper left')
+        # Handle axis array formatting
+        if rows == 1 and cols == 1:
+            axes = [axes]
+        elif rows == 1 or cols == 1:
+            axes = axes.flatten() if hasattr(axes, 'flatten') else axes
+            if not isinstance(axes, (list, np.ndarray)):
+                axes = [axes]
+        else:
+            axes = axes.flatten()
         
-        ax.text(0.05, 0.95, f'Weight: {weight:.1%}', transform=ax.transAxes, fontsize=9,
-                verticalalignment='top', bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.8))
+        for i, (ticker, results) in enumerate(regression_results.items()):
+            if i >= len(axes):
+                print(f"Warning: Not enough subplots for {ticker}")
+                continue
+            ax = axes[i]
+            
+            x, y = results['benchmark_returns'].values, results['stock_returns'].values
+            beta, r_squared, p_value, weight = results['beta'], results['r_squared'], results['p_value_regression'], results['portfolio_weight']
+            
+            ax.scatter(x, y, alpha=0.6, s=40, color='blue', edgecolors='black', linewidth=0.5)
+            x_line = np.linspace(x.min(), x.max(), 100)
+            ax.plot(x_line, beta * x_line + results['alpha'], color='red', linewidth=2, label=f'β = {beta:.3f}')
+            
+            significance = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else ""
+            ax.set_title(f'{ticker} vs {best_benchmark}\nR² = {r_squared:.4f}, p = {p_value:.4f}{significance}', fontsize=10, pad=10)
+            ax.set_xlabel(f'{best_benchmark} Excess Returns')
+            ax.set_ylabel(f'{ticker} Excess Returns')
+            ax.legend(loc='upper left')
+            
+            ax.text(0.05, 0.95, f'Weight: {weight:.1%}', transform=ax.transAxes, fontsize=10,
+                    verticalalignment='top', bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.8))
+        
+        # Hide empty subplots
+        for i in range(len(regression_results), len(axes)):
+            axes[i].set_visible(False)
+        
+        plt.tight_layout()
+        plt.suptitle(f'Portfolio Assets vs {best_benchmark} Benchmark - Regression Analysis', fontsize=16, y=1.02)
+        plt.show()
     
-    for i in range(len(regression_results), len(axes)): axes[i].set_visible(False)
-    plt.tight_layout()
-    plt.suptitle(f'Portfolio Assets vs {best_benchmark} Benchmark - Regression Analysis', fontsize=16, y=1.02)
-    plt.show()
-    
-    # Summary table and dashboard
+    # Summary table (always shown)
     summary_data = []
     for ticker, results in regression_results.items():
         p_val = results['p_value_regression']
@@ -236,58 +272,188 @@ def plot_benchmark_analysis(regression_results, best_benchmark):
         })
     
     summary_df = pd.DataFrame(summary_data)
+    
+    if len(summary_df) == 0:
+        print("❌ No data available for summary table.")
+        return pd.DataFrame()
+    
     print(f"\n📊 BENCHMARK REGRESSION SUMMARY: {best_benchmark}")
     display(summary_df.round(4))
     
     # Portfolio-level statistics
     weighted_beta = (summary_df['Beta'] * summary_df['Portfolio_Weight']).sum()
     weighted_r_squared = (summary_df['R_Squared'] * summary_df['Portfolio_Weight']).sum()
+    weighted_alpha = (summary_df['Alpha'] * summary_df['Portfolio_Weight']).sum()
+    significant_count = (summary_df['P_Value'] < 0.05).sum()
+    total_count = len(summary_df)
+    
     print(f"\n📈 PORTFOLIO STATISTICS: Weighted β={weighted_beta:.4f}, Weighted R²={weighted_r_squared:.4f}")
-    print(f"  • Significant relationships (p<0.05): {(summary_df['P_Value'] < 0.05).sum()}/{len(summary_df)}")
+    print(f"  • Significant relationships (p<0.05): {significant_count}/{total_count}")
     
     # Dashboard
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
     tickers, betas, weights, r_squared_values = summary_df['Ticker'].tolist(), summary_df['Beta'].tolist(), summary_df['Portfolio_Weight'].tolist(), summary_df['R_Squared'].tolist()
     
-    # Beta chart
+    # Beta chart - show beta values instead of weights, with larger font
     colors = ['green' if 0.8 <= b <= 1.2 else 'orange' if 0.5 <= b <= 1.5 else 'red' for b in betas]
     bars1 = axes[0, 0].bar(tickers, betas, color=colors, alpha=0.7)
     axes[0, 0].set_title(f'Beta vs {best_benchmark}')
     axes[0, 0].set_ylabel('Beta')
     axes[0, 0].tick_params(axis='x', rotation=45)
-    axes[0, 0].grid(True, alpha=0.3)
-    axes[0, 0].axhline(y=1, color='black', linestyle='--', alpha=0.7, label='Market Beta = 1.0')
+    axes[0, 0].axhline(y=1, color='black', linestyle='--', alpha=0.7, label='Benchmark Beta = 1.0')
     axes[0, 0].legend()
-    for bar, weight in zip(bars1, weights):
-        axes[0, 0].text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.01, f'{weight:.1%}', ha='center', va='bottom', fontsize=8)
+    # Show beta values instead of weights, with larger font
+    for bar, beta in zip(bars1, betas):
+        axes[0, 0].text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.01, f'{beta:.3f}', 
+                       ha='center', va='bottom', fontsize=10, fontweight='bold')
     
-    # R-squared chart
+    # R-squared bar chart with labels
     colors_r2 = ['green' if x > 0.7 else 'orange' if x > 0.5 else 'red' for x in r_squared_values]
-    axes[0, 1].bar(tickers, r_squared_values, color=colors_r2, alpha=0.7)
+    bars2 = axes[0, 1].bar(tickers, r_squared_values, color=colors_r2, alpha=0.7)
     axes[0, 1].set_title(f'R-squared vs {best_benchmark}')
     axes[0, 1].set_ylabel('R-squared')
     axes[0, 1].tick_params(axis='x', rotation=45)
-    axes[0, 1].grid(True, alpha=0.3)
+
+    # Add R-squared value labels on top of bars
+    for bar, r2_val in zip(bars2, r_squared_values):
+        axes[0, 1].text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.01, f'{r2_val:.3f}', 
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
     
-    # Beta vs Weight scatter
-    scatter = axes[1, 0].scatter(weights, betas, s=100, alpha=0.7, c=r_squared_values, cmap='RdYlGn', edgecolors='black')
-    axes[1, 0].set_xlabel('Portfolio Weight')
-    axes[1, 0].set_ylabel('Beta')
-    axes[1, 0].set_title('Beta vs Portfolio Weight')
-    axes[1, 0].grid(True, alpha=0.3)
-    plt.colorbar(scatter, ax=axes[1, 0]).set_label('R-squared')
-    for i, ticker in enumerate(tickers):
-        axes[1, 0].annotate(ticker, (weights[i], betas[i]), xytext=(5, 5), textcoords='offset points', fontsize=8)
-    
-    # Significance pie chart
-    significance_counts = summary_df['Significance'].value_counts()
-    sig_counts = [significance_counts.get(level, 0) for level in ['', '*', '**', '***']]
-    axes[1, 1].pie(sig_counts, labels=['Not Sig.', 'Sig. (*)', 'Highly Sig. (**)', 'Very Highly Sig. (***)'], 
-                   autopct='%1.0f%%', startangle=90, colors=['lightcoral', 'yellow', 'orange', 'lightgreen'])
-    axes[1, 1].set_title('Statistical Significance Distribution')
+    # Replace Beta vs Weight scatter with Benchmark Sector Weights
+    if benchmark_sectors_df is not None and len(benchmark_sectors_df) > 0:
+        try:
+            # Get the sector dictionary from the benchmark data
+            sector_dict = benchmark_sectors_df["Sectors"].iloc[0]
+            
+            # Clean and standardize sector names function
+            def clean_sector_name(sector_name):
+                """Clean sector names by removing underscores and proper formatting"""
+                if isinstance(sector_name, str):
+                    # Replace underscores with spaces
+                    cleaned = sector_name.replace('_', ' ')
+                    # Title case each word
+                    cleaned = ' '.join(word.capitalize() for word in cleaned.split())
+                    # Handle special cases
+                    cleaned = cleaned.replace('And', 'and')
+                    cleaned = cleaned.replace('&', 'and')
+                    return cleaned
+                return sector_name
+            
+            # Create a pandas Series from the dictionary with cleaned names
+            sectors_series = pd.Series(sector_dict)
+            
+            # Clean the index (sector names)
+            sectors_series.index = [clean_sector_name(sector) for sector in sectors_series.index]
+            
+            # Sort by weight in descending order for better visualization
+            sectors_series = sectors_series.sort_values(ascending=False)
+            
+            # Get portfolio sectors for color matching (also clean these names)
+            portfolio_sector_names = set()
+            if portfolio_df is not None and 'Sector' in portfolio_df.columns:
+                portfolio_sectors_cleaned = [clean_sector_name(sector) for sector in portfolio_df['Sector'].unique()]
+                portfolio_sector_names = set(portfolio_sectors_cleaned)
+            
+            print(f"Portfolio sectors: {portfolio_sector_names}")  # Debug print
+            print(f"Benchmark sectors: {set(sectors_series.index)}")  # Debug print
+            
+            # Create color list: #0b3040 for portfolio sectors, lightgray for others
+            bar_colors = []
+            for sector in sectors_series.index:
+                if sector in portfolio_sector_names:
+                    bar_colors.append('#0b3040')  # Same color as portfolio
+                else:
+                    bar_colors.append('lightgray')   # Different color for non-portfolio sectors
+            
+            # Create horizontal bar chart with color coding
+            bars = axes[1, 0].barh(range(len(sectors_series)), sectors_series.values, alpha=0.7, color=bar_colors)
+            axes[1, 0].set_yticks(range(len(sectors_series)))
+            axes[1, 0].set_yticklabels(sectors_series.index, fontsize=10)
+            axes[1, 0].set_xlabel('Weight (%)')
+            axes[1, 0].set_title(f'Sector Weights for {best_benchmark}')
+            
+            # Add percentage labels at the end of each bar
+            for i, v in enumerate(sectors_series.values):
+                axes[1, 0].text(v + 0.005, i, f'{v:.1%}', va='center', ha='left', fontsize=10, fontweight='bold')
+                
+            # Set x-axis to percentage format
+            axes[1, 0].set_xlim(0, max(sectors_series.values) * 1.15)
+            
+            # Invert y-axis so highest values appear at top
+            axes[1, 0].invert_yaxis()
+            
+            # Add legend to explain color coding
+            from matplotlib.patches import Patch
+            legend_elements = [
+                Patch(facecolor='#0b3040', alpha=0.7, label='Portfolio Sectors'),
+                Patch(facecolor='lightgray', alpha=0.7, label='Other Sectors')
+            ]
+            axes[1, 0].legend(handles=legend_elements, loc='lower right', fontsize=10)
+            
+        except Exception as e:
+            print(f"Warning: Could not create sector weights chart: {e}")
+            # Fallback to original Beta vs Weight scatter
+            scatter2 = axes[1, 0].scatter(weights, betas, s=100, alpha=0.7, c=r_squared_values, cmap='RdYlGn', edgecolors='black')
+            axes[1, 0].set_xlabel('Portfolio Weight')
+            axes[1, 0].set_ylabel('Beta')
+            axes[1, 0].set_title('Beta vs Portfolio Weight')
+            plt.colorbar(scatter2, ax=axes[1, 0]).set_label('R-squared')
+            for i, ticker in enumerate(tickers):
+                axes[1, 0].annotate(ticker, (weights[i], betas[i]), xytext=(5, 5), textcoords='offset points', fontsize=10)
+    else:
+        # Fallback to original Beta vs Weight scatter if no sector data provided
+        scatter2 = axes[1, 0].scatter(weights, betas, s=100, alpha=0.7, c=r_squared_values, cmap='RdYlGn', edgecolors='black')
+        axes[1, 0].set_xlabel('Portfolio Weight')
+        axes[1, 0].set_ylabel('Beta')
+        axes[1, 0].set_title('Beta vs Portfolio Weight')
+        plt.colorbar(scatter2, ax=axes[1, 0]).set_label('R-squared')
+        for i, ticker in enumerate(tickers):
+            axes[1, 0].annotate(ticker, (weights[i], betas[i]), xytext=(5, 5), textcoords='offset points', fontsize=10)
+
+    # Portfolio Sector Weights from actual portfolio data
+    try:
+        if portfolio_df is not None and 'Sector' in portfolio_df.columns and 'Weight' in portfolio_df.columns:
+            # Calculate actual portfolio sector weights from portfolio_df
+            portfolio_sectors = portfolio_df.groupby('Sector')['Weight'].sum().sort_values(ascending=False)
+            
+            # Create horizontal bar chart for portfolio sectors
+            bars = axes[1, 1].barh(range(len(portfolio_sectors)), portfolio_sectors.values, alpha=0.7, color='#0b3040')
+            axes[1, 1].set_yticks(range(len(portfolio_sectors)))
+            axes[1, 1].set_yticklabels(portfolio_sectors.index, fontsize=10)
+            axes[1, 1].set_xlabel('Weight (%)')
+            axes[1, 1].set_title('Sector Weights for Portfolio')
+            
+            # Add percentage labels at the end of each bar
+            for i, v in enumerate(portfolio_sectors.values):
+                axes[1, 1].text(v + 0.005, i, f'{v:.1%}', va='center', ha='left', fontsize=10, fontweight='bold')
+                
+            # Set x-axis to percentage format
+            axes[1, 1].set_xlim(0, max(portfolio_sectors.values) * 1.15)
+            
+            # Invert y-axis so highest values appear at top
+            axes[1, 1].invert_yaxis()
+            
+        else:
+            # Fallback message if no portfolio data available
+            axes[1, 1].text(0.5, 0.5, 'Portfolio Sector Data\nNot Available', 
+                        ha='center', va='center', transform=axes[1, 1].transAxes, 
+                        fontsize=14, bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.8))
+            axes[1, 1].set_title('Portfolio Sector Weights')
+            
+    except Exception as e:
+        print(f"Warning: Could not create portfolio sector weights chart: {e}")
+        # Fallback to significance pie chart
+        significance_counts = summary_df['Significance'].value_counts()
+        sig_counts = [significance_counts.get(level, 0) for level in ['', '*', '**', '***']]
+        axes[1, 1].pie(sig_counts, labels=['Not Sig.', 'Sig. (*)', 'Highly Sig. (**)', 'Very Highly Sig. (***)'], 
+                    autopct='%1.0f%%', startangle=90, colors=['lightcoral', 'yellow', 'orange', 'lightgreen'])
+        axes[1, 1].set_title('Statistical Significance Distribution')
     
     plt.tight_layout()
-    plt.suptitle(f'Benchmark Analysis Dashboard: {best_benchmark}', fontsize=16, y=1.02)
+    
+    # Create subtitle with portfolio statistics and more padding
+    subtitle_text = f'Weighted β={weighted_beta:.4f}, Weighted R²={weighted_r_squared:.4f} • Significant relationships (p<0.05): {significant_count}/{total_count}'
+    plt.suptitle(f'Benchmark Analysis Dashboard: {best_benchmark}\n{subtitle_text}', fontsize=16, y=1.08)  # Increased y from 1.02 to 1.08
     plt.show()
     
     return summary_df
