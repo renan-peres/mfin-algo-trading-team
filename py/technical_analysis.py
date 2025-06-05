@@ -1574,8 +1574,8 @@ def plot_complete_strategy_analysis(optimization_results, quotes, training_set, 
                 
                 # Add a vertical line to separate training and test periods
                 if not training_data.empty and not test_data.empty:
-                    ax.axvline(x=training_data.index[-1], color='gray', linestyle='--', 
-                            alpha=0.7, linewidth=1, label='Train/Test Split', zorder=2)
+                    ax.axvline(x=training_data.index[-1], color='red', linestyle='--', 
+                            alpha=0.7, linewidth=1.5, label='Train/Test Split', zorder=2)
                 
             except Exception as e:
                 ax.text(0.5, 0.5, f'Error plotting {ticker}\n{str(e)}', ha='center', va='center', 
@@ -1624,13 +1624,19 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
     for metric in metrics:
         if metric in optimization_summary.columns:
             col_data = optimization_summary[metric]
+            
+            # Rename metrics for display
+            display_name = metric.replace('_', ' ')
+            if metric == 'Best_Sharpe':
+                display_name = 'Sharpe Ratio'
+            elif metric == 'Best_Sortino':
+                display_name = 'Sortino Ratio'
+            
             stats_data.append({
-                'Metric': metric.replace('_', ' '),
+                'Metric': display_name,
                 'Mean': col_data.mean(),
-                'Median': col_data.median(),
                 'Min': col_data.min(),
                 'Max': col_data.max(),
-                'Std Dev': col_data.std(),
                 'Count': col_data.count()
             })
     
@@ -1651,8 +1657,12 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
     ax1 = axes[0]
     ax1.axis('tight')
     ax1.axis('off')
-    ax1.set_title('Portfolio Performance Statistics\n(Descriptive Statistics)', fontsize=14, weight='bold', pad=20)
     
+    # Add asset count to the title
+    asset_count = len(optimization_summary)
+    ax1.set_title(f'Portfolio Performance Statistics\nAssets: {asset_count}', 
+                  fontsize=14, weight='bold', pad=20)
+
     # Format the table data for display
     table_data = []
     for _, row in stats_df.iterrows():
@@ -1662,27 +1672,23 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
             formatted_row = [
                 metric,
                 f"{row['Mean']:.2%}",
-                f"{row['Median']:.2%}",
                 f"{row['Min']:.2%}",
                 f"{row['Max']:.2%}",
-                f"{row['Std Dev']:.2%}"
             ]
         else:
             # Format as numbers (Sharpe and Sortino ratios)
             formatted_row = [
                 metric,
                 f"{row['Mean']:.3f}",
-                f"{row['Median']:.3f}",
                 f"{row['Min']:.3f}",
                 f"{row['Max']:.3f}",
-                f"{row['Std Dev']:.3f}"
             ]
         table_data.append(formatted_row)
     
     # Create table
     table = ax1.table(
         cellText=table_data,
-        colLabels=['Metric', 'Mean', 'Median', 'Min', 'Max', 'Std Dev'],
+        colLabels=['Metric', 'Mean', 'Min', 'Max'],
         cellLoc='center',
         loc='center',
         bbox=[0, 0, 1, 1]
@@ -1693,15 +1699,16 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
     table.set_fontsize(10)
     table.scale(1, 2)
     
-    # Color code the header - Fixed: use 6 columns (0 to 5)
-    for i in range(6):
+    # Color code the header - FIXED: use actual number of columns instead of hardcoded 6
+    num_table_columns = len(['Metric', 'Mean', 'Min', 'Max'])  # 4 columns
+    for i in range(num_table_columns):
         table[(0, i)].set_facecolor('#4CAF50')
         table[(0, i)].set_text_props(weight='bold', color='white')
     
-    # Color code the rows based on metric type
+    # Color code the rows based on metric type - UPDATED with new names
     for i, (_, row) in enumerate(stats_df.iterrows(), 1):
         metric = row['Metric']
-        if metric in ['Best Sharpe', 'Best Sortino']:
+        if metric in ['Sharpe Ratio', 'Sortino Ratio']:  # Updated names
             color = '#E8F5E8'  # Light green for ratios
         elif metric == 'CAGR':
             color = '#FFF9C4'  # Light yellow for returns
@@ -1710,7 +1717,7 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
         else:
             color = 'white'
         
-        for j in range(6):
+        for j in range(num_table_columns):
             table[(i, j)].set_facecolor(color)
     
     # 2. Risk-Return Profile (Scatter Plot) - only if we have a second subplot
@@ -1738,6 +1745,11 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
                                (optimization_summary['Volatility'].iloc[i] * 100, 
                                 optimization_summary['CAGR'].iloc[i] * 100),
                                xytext=(5, 5), textcoords='offset points', fontsize=10, fontweight='bold')
+        else:
+            # If required columns are missing, show a message
+            ax2.text(0.5, 0.5, 'Risk-Return Profile\nRequires: Volatility, CAGR, Best_Sortino columns',
+                    ha='center', va='center', transform=ax2.transAxes,
+                    bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.7))
     
     # Hide any unused subplots
     for idx in range(2, len(axes)):
@@ -1757,7 +1769,7 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
     formatted_stats = stats_df.copy()
     
     # Format numeric columns
-    for col in ['Mean', 'Median', 'Min', 'Max', 'Std Dev']:
+    for col in ['Mean', 'Min', 'Max']:
         formatted_stats[col] = formatted_stats.apply(
             lambda row: f"{row[col]:.2%}" if row['Metric'] in ['CAGR', 'Volatility', 'Max Drawdown'] 
             else f"{row[col]:.3f}", axis=1
