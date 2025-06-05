@@ -26,10 +26,10 @@ flowchart TD
     
     %% Screening Criteria
     G --> C2[Fundamental Screening Criteria]
-    C2 --> C3[Market Cap > $50B]
+    C2 --> C3[Market Cap >= $50B <= $500B]
     C2 --> C4[P/E < 30]
     C2 --> C5[P/S ≤ 5]
-    C2 --> C6[P/B > 0 & P/B < 10]
+    C2 --> C6[P/B > 0 <= 10]
     C2 --> C7[Operating Margin > 20%]
     
     %% Screened Results
@@ -43,7 +43,7 @@ flowchart TD
     C8 --> G1["Markowitz Mean Variance (Sharpe Ratio Maximization) Model"]
     
     %% Optimization Constraints
-    G1 --> CONSTRAINTS[Portfolio Constraints]
+    G1 --> CONSTRAINTS[Markowitz Optimization Constraints]
     CONSTRAINTS --> G2[Min Assets: 5]
     CONSTRAINTS --> G3[Max Assets: ∞]
     CONSTRAINTS --> G4[Max Asset per Sector: 2]
