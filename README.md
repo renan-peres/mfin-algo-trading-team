@@ -26,10 +26,10 @@ flowchart TD
     
     %% Screening Criteria
     G --> C2[Fundamental Screening Criteria]
-    C2 --> C3[Market Cap >= $50B <= $500B]
+    C2 --> C3[$50B ≤ Market Cap ≤ $500B]
     C2 --> C4[P/E < 30]
     C2 --> C5[P/S ≤ 5]
-    C2 --> C6[P/B > 0 <= 10]
+    C2 --> C6[0 < P/B ≤ 10]
     C2 --> C7[Operating Margin > 20%]
     
     %% Screened Results
