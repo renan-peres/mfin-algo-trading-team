@@ -1561,16 +1561,16 @@ def plot_complete_strategy_analysis(optimization_results, quotes, training_set, 
                 
                 title_parts = [
                     f'{ticker} - {strategy}',
-                    f'CAGR: {cagr:.2%} | Vol: {volatility:.2%} | Sharpe: {sharpe:.3f} | Sortino: {sortino:.3f} | Max DD: {max_dd:.2%} ✓',
-                    f'Parameters: {short_period}/{long_period}',
+                    # f'CAGR: {cagr:.2%} | Vol: {volatility:.2%} | Sharpe: {sharpe:.3f} | Sortino: {sortino:.3f} | Max DD: {max_dd:.2%} ✓',
+                    # f'Parameters: {short_period}/{long_period}',
                     signal_info
                 ]
                 
                 ax.set_title('\n'.join(title_parts), fontsize=10, weight='bold')
                 ax.set_ylabel('Price', fontsize=10)
-                ax.legend(fontsize=8, loc='upper left')
+                ax.legend(fontsize=12, loc='upper left')
                 ax.grid(True, alpha=0.3, zorder=0)
-                ax.tick_params(axis='x', rotation=45, labelsize=8)
+                ax.tick_params(axis='x', rotation=45, labelsize=12)
                 
                 # Add a vertical line to separate training and test periods
                 if not training_data.empty and not test_data.empty:
