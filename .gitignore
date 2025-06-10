@@ -1,6 +1,6 @@
 .env
 .venv/
 .ruff_cache
-data/datasets/
 */__pycache__/
 **/__pycache__/
+data/data.db
