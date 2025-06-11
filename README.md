@@ -15,8 +15,10 @@
 - [📊 Strategy Details](#-strategy-details)
 - [🔧 Configuration](#-configuration)
 - [📁 Project Structure](#-project-structure)
-- [🧪 Testing](#-testing)
-- [📖 Documentation](#-documentation)
+- [📊 Dashboard](#-dashboard)
+- [🔄 Automated Pipelines](#-automated-pipelines)
+- [🙏 Acknowledgments](#-acknowledgments)
+- [📄 License](#-license)
 
 ## 🎯 Project Overview
 
@@ -274,21 +276,7 @@ mfin-algo-trading-team/
 └── 📁 docs/                  # Documentation
 ```
 
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest tests/
-
-# Run specific test categories
-pytest tests/test_portfolio.py -v
-pytest tests/test_data_collection.py -v
-
-# Run with coverage
-pytest --cov=src tests/
-```
-
-## 📊 Performance Dashboard
+## 📊 Dashboard
 
 The system generates comprehensive performance reports including:
 
