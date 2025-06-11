@@ -10,7 +10,7 @@
 
 - [🎯 Project Overview](#-project-overview)
 - [✨ Key Features](#-key-features)
-- [🏗️ System Architecture](#️-system-architecture)
+- [🏗️ System Architecture](#-system-architecture)
 - [🚀 Quick Start](#-quick-start)
 - [📊 Strategy Details](#-strategy-details)
 - [📈 Performance Metrics](#-performance-metrics)
