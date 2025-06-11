@@ -28,7 +28,40 @@ This project implements a comprehensive algorithmic trading system that combines
 - **Risk management** through systematic backtesting and performance evaluation
 - **Automated execution** via scheduled pipelines and monitoring
 
-### 🎨 System Flow Visualization
+## ✨ Key Features
+
+### 📊 **Data Collection & Processing**
+- **Multi-source data aggregation**: Yahoo Finance, OpenBB, Financial Modeling Prep API
+- **Real-time & historical data**: Stock prices, fundamentals, economic indicators
+- **News sentiment analysis**: TextBlob-based sentiment scoring
+- **Efficient data storage**: Polars & DuckDB for high-performance analytics
+
+### 🎯 **Portfolio Strategies**
+
+#### Long-term Strategy (Buy & Hold)
+- **Markowitz Mean-Variance Optimization**
+- **Fundamental screening criteria**:
+  - Market Cap: $50B - $500B
+  - P/E Ratio: < 30
+  - P/S Ratio: ≤ 5
+  - P/B Ratio: 0 < x ≤ 10
+  - Operating Margin: > 20%
+- **Sector diversification constraints**
+- **Monthly rebalancing**
+
+#### Short-term Strategy
+- **Technical indicator integration**
+- **Sentiment-driven signals**
+- **Weekly rebalancing**
+- **Risk-adjusted position sizing**
+
+### 📈 **Advanced Analytics**
+- **QuantStats integration** for comprehensive performance reporting
+- **Statistical significance testing**
+- **Monte Carlo simulations**
+- **Drawdown analysis and risk metrics**
+
+## 🎨 System Architecture
 
 ```mermaid
 flowchart TD
@@ -148,55 +181,6 @@ flowchart TD
     style RESULTS fill:#1abc9c,stroke:#16a085,stroke-width:2px,color:#ffffff
 ```
 
-## Getting Started
-
-```bash
-# Clone the repository
-git clone https://github.com/renan-peres/mfin-portfolio-management.git
-cd mfin-portfolio-management
-
-# Install Astral UV (for reproducible venvs)
-curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
-uv venv                                 # or: python3 -m venv .venv
-source .venv/bin/activate               # or: source venv/bin/activate 
-
-# Install dependencies
-uv pip install -r requirements.txt 
-```
-
-## ✨ Key Features
-
-### 📊 **Data Collection & Processing**
-- **Multi-source data aggregation**: Yahoo Finance, OpenBB, Financial Modeling Prep API
-- **Real-time & historical data**: Stock prices, fundamentals, economic indicators
-- **News sentiment analysis**: TextBlob-based sentiment scoring
-- **Efficient data storage**: Polars & DuckDB for high-performance analytics
-
-### 🎯 **Portfolio Strategies**
-
-#### Long-term Strategy (Buy & Hold)
-- **Markowitz Mean-Variance Optimization**
-- **Fundamental screening criteria**:
-  - Market Cap: $50B - $500B
-  - P/E Ratio: < 30
-  - P/S Ratio: ≤ 5
-  - P/B Ratio: 0 < x ≤ 10
-  - Operating Margin: > 20%
-- **Sector diversification constraints**
-- **Monthly rebalancing**
-
-#### Short-term Strategy
-- **Technical indicator integration**
-- **Sentiment-driven signals**
-- **Weekly rebalancing**
-- **Risk-adjusted position sizing**
-
-### 📈 **Advanced Analytics**
-- **QuantStats integration** for comprehensive performance reporting
-- **Statistical significance testing**
-- **Monte Carlo simulations**
-- **Drawdown analysis and risk metrics**
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -212,9 +196,12 @@ uv pip install -r requirements.txt
 git clone https://github.com/renan-peres/mfin-algo-trading-team.git
 cd mfin-algo-trading-team
 
+# Install Astral UV (for reproducible venvs)
+curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+
 # Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv venv                                 # or: python3 -m venv .venv
+source .venv/bin/activate               # or: source venv/bin/activate 
 
 # Install dependencies
 pip install -r requirements.txt
