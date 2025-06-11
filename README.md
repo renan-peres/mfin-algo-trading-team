@@ -66,7 +66,7 @@ This project implements a comprehensive algorithmic trading system that combines
 ```mermaid
 flowchart TB
     %% Data Sources
-    DS["📊 Equity Investment Portfolio<br/>(S&P 500 Stocks)"]
+    DS["📊 Equity Portfolio<br/>(S&P 500 Stocks)"]
     
     %% Strategy Split
     DS -->|85% Capital Allocation| LTS["📈 Long-Term Portfolio<br/>(Quartely Rebalancing)"]
@@ -74,13 +74,13 @@ flowchart TB
     
     %% Long-Term Strategy Branch
     LTS --> FS[🔍 Fundamental Screening<br/>Market Cap: $50B-$500B<br/>P/E < 30, P/S ≤ 5, P/B: 0-10<br/>Operating Margin >= 20%]
-    FS --> HD["💹 Historical Price Data (10Y)<br/>(Anualized Returns)"]
+    FS --> HD["💹 Historical Price Data<br/>(Anualized Returns)"]
     HD --> CM["⚙️ Covariance Matrix<br/>(Assets STDev Correlation)"]
     CM --> MPT["🎯 Markowitz Model<br/>(Sharpe Ratio Optimization)"<br/>Min 5 assets<br/>Max 30% Asset Allocation]
     MPT --> LTP[🏆 Long-Term Portfolio<br/>Optimized Weights]
     
     %% Short-Term Strategy Branch
-    STS --> ND["📰 News Data<br/>Sentiment Analysis (TextBlob)"]
+    STS --> ND["📰 News Data Sentiment<br/>(TextBlob)"]
     ND --> TI["📈 Technical Indicators<br/>(SMA, EMA, RSI, BBands)"]
     TI --> SG["⚖️ Parameter Selection<br/>(Max Sharpe/Sortino Ratio)"]
     SG --> PS2["⚡ Signal Generation<br/>(Buy | Sell | Hold)"]
