@@ -202,7 +202,7 @@ jupyter notebook notebooks/01_data_collection.ipynb
 
 ## 📊 Strategy Details
 
-### Long-term Portfolio Construction
+### **Long-Term Portfolio Construction (85% Capital Allocation)**
 
 1. **Data Collection**: Scrape S&P 500 constituents and fundamental data
 2. **Screening**: Apply fundamental filters to identify quality stocks
@@ -211,6 +211,13 @@ jupyter notebook notebooks/01_data_collection.ipynb
    - Maximum 2 assets per sector
    - Minimum 5% allocation per selected asset
 4. **Backtesting**: Monthly rebalancing with transaction cost modeling
+
+![Assets Risk-Return Profile](img/risk_return_profile.png)
+![Markowitz Efficient Frontier](img/markowitz_ef.png)
+
+### **Sort-Term Portfolio Construction (15% Capital Allocation)**
+![Parameter Selection](img/parameter_selection.png)
+![Trading Signals](img/trading_signals.png)
 
 ## 🔧 Configuration
 
