@@ -13,12 +13,10 @@
 - [🏗️ System Architecture](#-system-architecture)
 - [🚀 Quick Start](#-quick-start)
 - [📊 Strategy Details](#-strategy-details)
-- [📈 Performance Metrics](#-performance-metrics)
 - [🔧 Configuration](#-configuration)
 - [📁 Project Structure](#-project-structure)
 - [🧪 Testing](#-testing)
 - [📖 Documentation](#-documentation)
-- [🤝 Contributing](#-contributing)
 
 ## 🎯 Project Overview
 
@@ -343,21 +341,6 @@ bash pipelines/monthly_report.sh
 # Risk monitoring (daily)
 bash pipelines/risk_monitor.sh
 ```
-
-## 📈 Recent Performance
-
-- **YTD Return**: +15.2%
-- **Sharpe Ratio**: 1.18
-- **Max Drawdown**: -12.1%
-- **Benchmark Alpha**: +3.1%
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## 📄 License
 
