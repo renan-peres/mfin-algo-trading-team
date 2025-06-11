@@ -61,143 +61,101 @@ This project implements a comprehensive algorithmic trading system that combines
 
 ## 🎨 System Architecture
 
-## 🎨 System Architecture
-
-### High-Level System Flow
 ```mermaid
 flowchart TB
-    A[📊 Data Sources] --> B[🔍 Data Processing]
-    B --> C{Strategy Type}
+    %% Data Sources
+    DS["📊 Equity Investment Portfolio<br/>(S&P 500 Stocks)"]
     
-    C -->|Long-term| D[📈 Fundamental Analysis]
-    C -->|Short-term| E[⚡ Technical & Sentiment]
+    %% Strategy Split
+    DS -->|85% Capital Allocation| LTS["📈 Long-Term Portfolio<br/>(Quartely Rebalancing)"]
+    DS -->|15% Capital Allocation| STS["⚡ Short-Term Portfolio<br/>(Weekly Rebalancing)"]
     
-    D --> F[🎯 Portfolio Optimization<br/>Markowitz MPT]
-    E --> G[📊 Signal Generation<br/>Technical Indicators]
+    %% Long-Term Strategy Branch
+    LTS --> FS[🔍 Fundamental Screening<br/>Market Cap: $50B-$500B<br/>P/E < 30, P/S ≤ 5, P/B: 0-10<br/>Operating Margin >= 20%]
+    FS --> HD["💹 Historical Price Data (10Y)<br/>(Anualized Returns)"]
+    HD --> CM["⚙️ Covariance Matrix<br/>(Assets STDev Correlation)"]
+    CM --> MPT["🎯 Markowitz Model<br/>(Sharpe Ratio Optimization)"<br/>Min 5 assets<br/>Max 30% Asset Allocation]
+    MPT --> LTP[🏆 Long-Term Portfolio<br/>Optimized Weights]
     
-    F --> H[🔄 Monthly Rebalancing]
-    G --> I[⚡ Weekly Rebalancing]
+    %% Short-Term Strategy Branch
+    STS --> ND["📰 News Data<br/>Sentiment Analysis (TextBlob)"]
+    ND --> TI["📈 Technical Indicators<br/>(SMA, EMA, RSI, BBands)"]
+    TI --> SG["⚖️ Parameter Selection<br/>(Max Sharpe/Sortino Ratio)"]
+    SG --> PS2["⚡ Signal Generation<br/>(Buy | Sell | Hold)"]
+    PS2 --> STP[🎯 Short-Term Portfolio<br/>Active Trading Positions]
     
-    H --> J[📋 Backtesting Engine]
-    I --> J
+    %% Portfolio Combination
+    LTP --> CP["🔄 Master Strategy<br/>(Combined Portfolios)"]
+    STP --> CP
     
-    J --> K[📊 Performance Analytics<br/>Risk Assessment]
-    K --> L[📈 Portfolio Reports]
+    %% Backtesting & Analysis
+    CP --> BE[📋 Backtesting Engine<br/>Historical Performance Testing]
+    BE --> PA[📊 Performance Analytics<br/>QuantStats Integration<br/>Risk Metrics & Attribution]
+    PA --> PR[📈 Portfolio Reports<br/>Benchmark Comparison<br/>Monte Carlo Analysis]
     
-    style A fill:#e3f2fd,stroke:#1976d2
-    style F fill:#f3e5f5,stroke:#7b1fa2
-    style J fill:#e8f5e8,stroke:#388e3c
-    style K fill:#fff3e0,stroke:#f57c00
-```
-
-### Long-Term Strategy Workflow
-```mermaid
-flowchart TD
-    Start{📊 Equities Portfolio} --> Split[🚀 S&P 500 Stocks]
+    %% Automation
+    PR --> AP[🤖 Automated Pipelines<br/>Weekly/Monthly Execution]
+    AP --> RM[⚠️ Risk Monitoring<br/>Drawdown Alerts<br/>Performance Tracking]
     
-    Split -->|"85% Allocation"| LongTerm["📈 Long-Term Strategy<br/>(Quartely Review)"]
-    Split -->|"15% Allocation"| ShortTerm["⚡ Short-Term Strategy<br/>(Weekly Review)"]
+    %% Improved Styling with Better Contrast
+    style DS fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000000
     
-    %% Long-Term Portfolio Flow
-    LongTerm --> Screen[🔍 Fundamental Screening]
+    %% Long-term styling with dark text
+    style LTS fill:#e8f5e8,stroke:#4caf50,stroke-width:2px,color:#000000
+    style FS fill:#fff8e1,stroke:#ff9800,stroke-width:2px,color:#000000
+    style HD fill:#e8f5e8,stroke:#4caf50,stroke-width:2px,color:#000000
+    style CM fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000000
+    style MPT fill:#e1f5fe,stroke:#0288d1,stroke-width:3px,color:#000000
+    style LTP fill:#c8e6c9,stroke:#388e3c,stroke-width:3px,color:#000000
     
-    Screen -->|"Market Cap:<br/>$50B - $500B"| Valid1[✅ Size Filter]
-    Screen -->|"Valuation:<br/>P/E < 30, P/S ≤ 5, P/B: 0-10"| Valid2[✅ Value Filter]
-    Screen -->|"Efficiency:<br/>Op Margin > 20%"| Valid3[✅ Efficiency Filter]
+    %% Short-term styling with white text on dark backgrounds
+    style STS fill:#ffcdd2,stroke:#d32f2f,stroke-width:2px,color:#000000
+    style ND fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000000
+    style TI fill:#ffcdd2,stroke:#d32f2f,stroke-width:2px,color:#000000
+    style SG fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000000
+    style PS2 fill:#ffcdd2,stroke:#d32f2f,stroke-width:2px,color:#000000
+    style STP fill:#ef9a9a,stroke:#c62828,stroke-width:3px,color:#000000
     
-    Valid1 --> Collect[📥 Screened Assets]
-    Valid2 --> Collect
-    Valid3 --> Collect
+    %% Combined flow styling
+    style CP fill:#b3e5fc,stroke:#0288d1,stroke-width:3px,color:#000000
+    style BE fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#000000
+    style PA fill:#ffe0b2,stroke:#f57c00,stroke-width:2px,color:#000000
+    style PR fill:#f8bbd9,stroke:#c2185b,stroke-width:3px,color:#000000
+    style AP fill:#e0e0e0,stroke:#424242,stroke-width:2px,color:#000000
+    style RM fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000000
     
-    Collect --> Price[💹 Historical Price Data]
-    Price --> Returns[📈 Return & Risk Metrics]
-    Returns --> Covariance[⚙️ Covariance Matrix]
-    
-    Covariance --> Optimize["🎯 Markowitz Model<br/>(Sharpe Ratio Optimization)"]
-    
-    Optimize --> LongPortfolio[🏆 Long-Term Portfolio<br/>Weights & Allocations]
-    
-    %% Short-Term Portfolio Flow
-    ShortTerm --> TechData[📊 Technical Data Collection]
-    ShortTerm --> NewsData[📰 News & Sentiment Data]
-    
-    TechData --> Indicators[📈 Technical Indicators<br/>RSI, MACD, Bollinger Bands]
-    NewsData --> Sentiment[🎭 Sentiment Analysis<br/>TextBlob Scoring]
-    
-    Indicators --> SignalGen[⚡ Signal Generation<br/>Buy/Sell/Hold]
-    Sentiment --> SignalGen
-    
-    SignalGen --> RiskSize[⚖️ Risk-Adjusted<br/>Position Sizing]
-    RiskSize --> ShortPortfolio[🎯 Short-Term Portfolio<br/>Active Positions]
-    
-    %% Combined Flow
-    LongPortfolio --> CombinePort["🔄 Master Strategy <br/>(Portfolios Combination)"]
-    ShortPortfolio --> CombinePort
-    
-    CombinePort --> FinalBacktest[📊 Combined Backtesting]
-    FinalBacktest --> FinalEval["📊 Performance Evaluation<br/>(Benchmark Comparison)"]
-    
-    %% Styling
-    style Start fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000000
-    style Split fill:#fff3e0,stroke:#f57c00,stroke-width:3px,color:#000000
-    style LongTerm fill:#e8f5e8,stroke:#4caf50,stroke-width:2px,color:#000000
-    style ShortTerm fill:#ffebee,stroke:#f44336,stroke-width:2px,color:#000000
-    
-    %% Long-term styling
-    style Screen fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000000
-    style Valid1 fill:#e8f5e8,stroke:#4caf50,stroke-width:2px,color:#000000
-    style Valid2 fill:#e8f5e8,stroke:#4caf50,stroke-width:2px,color:#000000
-    style Valid3 fill:#e8f5e8,stroke:#4caf50,stroke-width:2px,color:#000000
-    style Collect fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000000
-    style Price fill:#ffffff,stroke:#333333,stroke-width:2px,color:#000000
-    style Returns fill:#ffffff,stroke:#333333,stroke-width:2px,color:#000000
-    style Covariance fill:#ffffff,stroke:#333333,stroke-width:2px,color:#000000
-    style Optimize fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#000000
-    style LongPortfolio fill:#e8f5e8,stroke:#388e3c,stroke-width:3px,color:#000000
-    
-    %% Short-term styling
-    style TechData fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000000
-    style NewsData fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000000
-    style Indicators fill:#ffebee,stroke:#e91e63,stroke-width:2px,color:#000000
-    style Sentiment fill:#ffebee,stroke:#e91e63,stroke-width:2px,color:#000000
-    style SignalGen fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000000
-    style RiskSize fill:#ffffff,stroke:#333333,stroke-width:2px,color:#000000
-    style ShortPortfolio fill:#ffebee,stroke:#d32f2f,stroke-width:3px,color:#000000
-    
-    %% Combined styling
-    style CombinePort fill:#e1f5fe,stroke:#0288d1,stroke-width:3px,color:#000000
-    style FinalBacktest fill:#fff8e1,stroke:#ffa000,stroke-width:2px,color:#000000
-    style FinalEval fill:#fce4ec,stroke:#c2185b,stroke-width:3px,color:#000000
-    
-    %% Subgraphs positioned side by side
-    subgraph LongTermFlow[" "]
+    %% Subgraph for better organization
+    subgraph LongFlow[" "]
         direction TB
-        Screen
-        Valid1
-        Valid2
-        Valid3
-        Collect
-        Price
-        Returns
-        Covariance
-        Optimize
-        LongPortfolio
+        FS
+        HD
+        CM
+        MPT
+        LTP
     end
     
-    subgraph ShortTermFlow[" "]
+    subgraph ShortFlow[" "]
         direction TB
-        TechData
-        NewsData
-        Indicators
-        Sentiment
-        SignalGen
-        RiskSize
-        ShortPortfolio
+        ND
+        TI
+        SG
+        PS2
+        STP
     end
     
-    %% Subgraph styling
-    style LongTermFlow fill:#f8f9fa,stroke:#4caf50,stroke-width:2px,stroke-dasharray: 5 5
-    style ShortTermFlow fill:#f8f9fa,stroke:#f44336,stroke-width:2px,stroke-dasharray: 5 5
+    subgraph Analytics[" "]
+        direction TB
+        BE
+        PA
+        PR
+        AP
+        RM
+    end
+    
+    %% Subgraph styling with better visibility
+    style LongFlow fill:#f1f8e9,stroke:#4caf50,stroke-width:2px,stroke-dasharray: 5 5
+    style ShortFlow fill:#fce4ec,stroke:#e91e63,stroke-width:2px,stroke-dasharray: 5 5
+    style Analytics fill:#fff8e1,stroke:#ff9800,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ## 🚀 Quick Start
