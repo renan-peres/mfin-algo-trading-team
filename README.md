@@ -231,15 +231,6 @@ jupyter notebook notebooks/01_data_collection.ipynb
    - Minimum 5% allocation per selected asset
 4. **Backtesting**: Monthly rebalancing with transaction cost modeling
 
-### Performance Metrics
-
-| Metric | Target | Current Performance |
-|--------|--------|-------------------|
-| Annual Return | > 10% | 12.3% |
-| Sharpe Ratio | > 1.0 | 1.15 |
-| Maximum Drawdown | < 20% | 18.2% |
-| Win Rate | > 60% | 64% |
-
 ## 🔧 Configuration
 
 ### Environment Variables
@@ -327,7 +318,7 @@ The system generates comprehensive performance reports including:
 - **Attribution Analysis**: Sector and security contribution
 - **Benchmark Comparison**: Alpha, beta, information ratio
 
-## 🔄 Automated Pipeline
+## 🔄 Automated Pipelines
 
 The system includes automated pipelines for:
 
