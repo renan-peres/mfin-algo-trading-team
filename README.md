@@ -83,17 +83,93 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[Scrape S&P 500<br>Constituents & Data]
-      --> B[Apply Fundamental<br>Screening]
-      --> C[Portfolio Optimization<br>(Markowitz)]
-      --> D[Backtest & Rebalance]
-      --> E[Performance Evaluation]
+    Title[Buy and Hold - Long Term Investment Strategy]
     
-    style A fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    style B fill:#e3fcec,stroke:#229954,stroke-width:2px
-    style C fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    style D fill:#fff8e1,stroke:#f57c00,stroke-width:2px
-    style E fill:#f9ebea,stroke:#c0392b,stroke-width:2px
+    %% Data Collection Phase
+    Title --> A[Data Collection Process]
+    A --> B[scrape_tickers.ipynb]
+    B --> B1[Scrape S&P 500 Constituents]
+    B1 --> B2[tickers_sp_500.txt]
+    
+    %% Parallel Data Scraping
+    B2 --> C1[scrape_fundamentals.ipynb]
+    B2 --> D1[scrape_quotes.ipynb]
+    C1 --> C1_OUT[Company Fundamentals Data]
+    D1 --> D1_OUT[Historical Price Data]
+    
+    %% Portfolio Construction Phase
+    C1_OUT --> F[Long-Term Portfolio Construction]
+    D1_OUT --> F
+    F --> G[01_long_term_portfolio.ipynb]
+    
+    %% Screening Criteria
+    G --> C2[Fundamental Screening Criteria]
+    C2 --> C3[$50B ≤ Market Cap ≤ $500B]
+    C2 --> C4[P/E < 30]
+    C2 --> C5[P/S ≤ 5]
+    C2 --> C6[0 < P/B ≤ 10]
+    C2 --> C7[Operating Margin > 20%]
+    
+    %% Screened Results
+    C3 --> C8[Screened Assets]
+    C4 --> C8
+    C5 --> C8
+    C6 --> C8
+    C7 --> C8
+    
+    %% Portfolio Optimization
+    C8 --> G1["Markowitz Mean Variance (Sharpe Ratio Maximization) Model"]
+    
+    %% Optimization Constraints
+    G1 --> CONSTRAINTS[Markowitz Optimization Constraints]
+    CONSTRAINTS --> G2[Min Assets: 5]
+    CONSTRAINTS --> G3[Max Assets: ∞]
+    CONSTRAINTS --> G4[Max Asset per Sector: 2]
+    CONSTRAINTS --> G5[Max Allocation: 30%]
+    CONSTRAINTS --> G6[Min Allocation: 5%]
+    
+    %% Optimized Portfolio Output
+    G2 --> OPTIMAL[Optimal Portfolio Weights]
+    G3 --> OPTIMAL
+    G4 --> OPTIMAL
+    G5 --> OPTIMAL
+    G6 --> OPTIMAL
+    
+    %% Backtesting Phase
+    OPTIMAL --> H[Backtest Strategy]
+    H --> I[02_backtest_strategy.ipynb]
+    I --> J["bt.Strategy()"]
+
+    J --> J1["bt.algos.RunMonthly() - Execute Monthly"]
+    J --> J2["bt.algos.SelectAll() - Include All Assets"]
+    J --> J3["bt.algos.WeighSpecified(**weights) - Asset Optimal Weights"]
+    J --> J4["bt.algos.Rebalance() - Rebalance Portfolio"]
+    
+    %% Final Output
+    J1 --> RESULTS[Backtest Results & Performance Metrics]
+    J2 --> RESULTS
+    J3 --> RESULTS
+    J4 --> RESULTS
+    
+    %% Styling
+    style Title fill:#2c3e50,stroke:#34495e,stroke-width:3px,color:#ffffff
+    style A fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#ffffff
+    style B fill:#e67e22,stroke:#d35400,stroke-width:2px,color:#ffffff
+    style C1 fill:#e67e22,stroke:#d35400,stroke-width:2px,color:#ffffff
+    style D1 fill:#e67e22,stroke:#d35400,stroke-width:2px,color:#ffffff
+    style G fill:#e67e22,stroke:#d35400,stroke-width:2px,color:#ffffff
+    style I fill:#e67e22,stroke:#d35400,stroke-width:2px,color:#ffffff
+    style B2 fill:#e67e22,stroke:#d35400,stroke-width:2px,color:#ffffff
+    style C1_OUT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#ffffff
+    style D1_OUT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#ffffff
+    style C2 fill:#27ae60,stroke:#229954,stroke-width:2px,color:#ffffff
+    style C8 fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#ffffff
+    style G1 fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#ffffff
+    style CONSTRAINTS fill:#27ae60,stroke:#229954,stroke-width:2px,color:#ffffff
+    style OPTIMAL fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#ffffff
+    style H fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#ffffff
+    style J fill:#27ae60,stroke:#229954,stroke-width:2px,color:#ffffff
+    style RESULTS fill:#1abc9c,stroke:#16a085,stroke-width:2px,color:#ffffff
 ```
 
 ## 🚀 Quick Start
