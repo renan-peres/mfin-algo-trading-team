@@ -62,24 +62,30 @@ This project implements a comprehensive algorithmic trading system that combines
 ## 🎨 System Architecture
 
 ```mermaid
-flowchart LR
-    A[Data Collection<br>(Market Data, Fundamentals, Sentiment)] 
-        --> B[Feature Engineering<br>& Data Processing]
-    B --> C[Strategy Layer]
-    C --> D1[Long-term Portfolio<br>(Markowitz, Screening)]
-    C --> D2[Short-term Signals<br>(Technical, Sentiment)]
-    D1 & D2 --> E[Execution Engine<br>(Backtesting, Live Trading)]
-    E --> F[Performance & Risk Analysis]
-    F --> G[Reporting<br>& Rebalancing]
+flowchart TD
+    A[Data Collection] --> B[Fundamental Analysis]
+    A --> C[Technical Analysis]
+    A --> D[Sentiment Analysis]
+    
+    B --> E[Stock Screening]
+    C --> F[Signal Generation]
+    D --> F
+    
+    E --> G[Portfolio Optimization]
+    F --> H[Short-term Strategy]
+    
+    G --> I[Backtesting Engine]
+    H --> I
+    
+    I --> J[Performance Analysis]
+    J --> K[Risk Assessment]
+    K --> L[Portfolio Rebalancing]
     
     style A fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    style D1 fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    style D2 fill:#e3fcec,stroke:#229954,stroke-width:2px
-    style E fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style F fill:#fff8e1,stroke:#f57c00,stroke-width:2px
-    style G fill:#f9ebea,stroke:#c0392b,stroke-width:2px
+    style G fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style I fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style J fill:#fff8e1,stroke:#f57c00,stroke-width:2px
 ```
-
 
 ```mermaid
 flowchart TD
