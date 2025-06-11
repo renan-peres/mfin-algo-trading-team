@@ -363,9 +363,6 @@ main() {
         exit 1
     fi
     
-    # Setup Quarto (if needed)
-    # setup_quarto
-    
     # Setup DuckDB
     setup_duckdb || exit 1
     
@@ -386,7 +383,7 @@ main() {
     run_notebook "04_benchmark_comparison.ipynb" || exit 1
 
     log "Step 5/5: Running Master Strategy..."
-    run_notebook "05_master_strategy_backtest.ipynb" || exit 1
+    run_notebook "05_master_strategy.ipynb" || exit 1
 
     log "===== Weekly Pipeline completed successfully! ====="
 }
