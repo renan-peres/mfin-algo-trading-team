@@ -787,8 +787,6 @@ def plot_portfolio_performance(optimization_summary, cols=2, rows=1):
     
     return stats_df
 
-# Replace lines 788-1408 with this code:
-
 def create_overfitting_analysis_report(optimization_results, test_set):
     """
     Create a comprehensive overfitting analysis report
@@ -810,6 +808,16 @@ def create_overfitting_analysis_report(optimization_results, test_set):
     }
     
     try:
+        # Validate inputs
+        if not optimization_results or not isinstance(optimization_results, dict):
+            raise ValueError("Invalid optimization_results - must be a non-empty dictionary")
+        
+        if test_set is None or test_set.empty:
+            raise ValueError("Invalid test_set - must be a non-empty DataFrame")
+        
+        if 'selected_tickers' not in optimization_results or not optimization_results['selected_tickers']:
+            raise ValueError("No selected tickers found in optimization results")
+        
         # Extract in-sample metrics
         in_sample_metrics = _extract_in_sample_metrics(optimization_results)
         
@@ -840,7 +848,27 @@ def create_overfitting_analysis_report(optimization_results, test_set):
         )
         
     except Exception as e:
+        print(f"⚠️ Error in overfitting analysis: {str(e)}")
         analysis['error'] = f"Error in overfitting analysis: {str(e)}"
+        # Return fallback analysis
+        analysis.update({
+            'summary': {
+                'num_strategies_tested': 0,
+                'in_sample_mean_sharpe': 0,
+                'out_sample_mean_sharpe': 0,
+                'in_sample_mean_sortino': 0,
+                'out_sample_mean_sortino': 0
+            },
+            'statistical_tests': {
+                'sharpe_t_stat': 0.0,
+                'sharpe_p_value': 1.0,
+                'sortino_t_stat': 0.0,
+                'sortino_p_value': 1.0,
+                'is_overfitted': True
+            },
+            'recommendations': ["⚠️ Analysis failed - manual review required"],
+            'detailed_results': {}
+        })
     
     return analysis
 
@@ -855,14 +883,27 @@ def _extract_in_sample_metrics(optimization_results):
         'volatilities': []
     }
     
-    for ticker, results in optimization_results['all_optimization_results'].items():
-        best_params = results['best_params']
+    try:
+        if 'all_optimization_results' not in optimization_results:
+            print("⚠️ No all_optimization_results found - using empty metrics")
+            return in_sample_metrics
         
-        in_sample_metrics['sharpe_ratios'].append(best_params['sharpe_ratio'])
-        in_sample_metrics['sortino_ratios'].append(best_params['sortino_ratio'])
-        in_sample_metrics['cagr_values'].append(best_params['cagr'])
-        in_sample_metrics['max_drawdowns'].append(best_params['max_drawdown'])
-        in_sample_metrics['volatilities'].append(best_params['volatility'])
+        for ticker, results in optimization_results['all_optimization_results'].items():
+            if not isinstance(results, dict) or 'best_params' not in results:
+                print(f"⚠️ Invalid results structure for {ticker}")
+                continue
+                
+            best_params = results['best_params']
+            
+            # Safely extract metrics with defaults
+            in_sample_metrics['sharpe_ratios'].append(best_params.get('sharpe_ratio', 0.0))
+            in_sample_metrics['sortino_ratios'].append(best_params.get('sortino_ratio', 0.0))
+            in_sample_metrics['cagr_values'].append(best_params.get('cagr', 0.0))
+            in_sample_metrics['max_drawdowns'].append(best_params.get('max_drawdown', 0.0))
+            in_sample_metrics['volatilities'].append(best_params.get('volatility', 0.0))
+    
+    except Exception as e:
+        print(f"⚠️ Error extracting in-sample metrics: {e}")
     
     return in_sample_metrics
 
@@ -877,30 +918,53 @@ def _calculate_out_sample_performance(optimization_results, test_set):
         'volatilities': []
     }
     
-    for ticker in optimization_results['selected_tickers']:
-        if ticker not in optimization_results['all_optimization_results']:
-            continue
-            
-        best_params = optimization_results['all_optimization_results'][ticker]['best_params']
+    try:
+        if 'selected_tickers' not in optimization_results:
+            print("⚠️ No selected_tickers found")
+            return out_sample_metrics
         
-        # Get test data for this ticker
-        if ticker not in test_set.columns:
-            continue
-            
-        ticker_test_data = test_set[ticker].dropna()
-        
-        # Apply the optimized strategy to test data
-        strategy_returns = _apply_strategy_to_test_data(ticker_test_data, best_params)
-        
-        if strategy_returns is not None and len(strategy_returns) > 0:
-            test_metrics = calculate_performance_metrics(strategy_returns)
-            
-            if test_metrics:
-                out_sample_metrics['sharpe_ratios'].append(test_metrics['sharpe_ratio'])
-                out_sample_metrics['sortino_ratios'].append(test_metrics['sortino_ratio'])
-                out_sample_metrics['cagr_values'].append(test_metrics['cagr'])
-                out_sample_metrics['max_drawdowns'].append(test_metrics['max_drawdown'])
-                out_sample_metrics['volatilities'].append(test_metrics['volatility'])
+        for ticker in optimization_results['selected_tickers']:
+            try:
+                if ticker not in optimization_results.get('all_optimization_results', {}):
+                    print(f"⚠️ No optimization results for {ticker}")
+                    continue
+                    
+                best_params = optimization_results['all_optimization_results'][ticker]['best_params']
+                
+                # Get test data for this ticker
+                if ticker not in test_set.columns:
+                    print(f"⚠️ {ticker} not in test set columns")
+                    continue
+                    
+                ticker_test_data = test_set[ticker].dropna()
+                
+                if len(ticker_test_data) < 10:
+                    print(f"⚠️ Insufficient test data for {ticker} ({len(ticker_test_data)} rows)")
+                    continue
+                
+                # Apply the optimized strategy to test data
+                strategy_returns = _apply_strategy_to_test_data(ticker_test_data, best_params)
+                
+                if strategy_returns is not None and len(strategy_returns) > 0:
+                    test_metrics = calculate_performance_metrics(strategy_returns)
+                    
+                    if test_metrics:
+                        out_sample_metrics['sharpe_ratios'].append(test_metrics['sharpe_ratio'])
+                        out_sample_metrics['sortino_ratios'].append(test_metrics['sortino_ratio'])
+                        out_sample_metrics['cagr_values'].append(test_metrics['cagr'])
+                        out_sample_metrics['max_drawdowns'].append(test_metrics['max_drawdown'])
+                        out_sample_metrics['volatilities'].append(test_metrics['volatility'])
+                    else:
+                        print(f"⚠️ Could not calculate test metrics for {ticker}")
+                else:
+                    print(f"⚠️ Could not apply strategy to test data for {ticker}")
+                    
+            except Exception as e:
+                print(f"⚠️ Error processing {ticker}: {e}")
+                continue
+    
+    except Exception as e:
+        print(f"⚠️ Error calculating out-sample performance: {e}")
     
     return out_sample_metrics
 
@@ -908,9 +972,17 @@ def _calculate_out_sample_performance(optimization_results, test_set):
 def _apply_strategy_to_test_data(ticker_data, best_params):
     """Apply optimized strategy parameters to test data"""
     try:
-        strategy_type = best_params['strategy_type']
-        short_period = best_params['short_period']
-        long_period = best_params['long_period']
+        if not isinstance(best_params, dict):
+            print("⚠️ Invalid best_params - must be dictionary")
+            return None
+        
+        strategy_type = best_params.get('strategy_type', 'SMA_Cross_Signal')
+        short_period = best_params.get('short_period', 20)
+        long_period = best_params.get('long_period', 50)
+        
+        if len(ticker_data) < max(short_period, long_period) + 10:
+            print(f"⚠️ Insufficient data for periods {short_period}/{long_period}")
+            return None
         
         if strategy_type == 'SMA_Cross_Signal':
             ma_short = ticker_data.rolling(short_period).mean()
@@ -926,71 +998,101 @@ def _apply_strategy_to_test_data(ticker_data, best_params):
         returns = ticker_data.pct_change().fillna(0)
         strategy_returns = (returns * pd.Series(signals, index=returns.index).shift(1)).fillna(0)
         
-        return strategy_returns.values[~np.isnan(strategy_returns.values)]
+        # Filter out invalid returns
+        valid_returns = strategy_returns.values[~np.isnan(strategy_returns.values)]
+        valid_returns = valid_returns[np.isfinite(valid_returns)]
+        
+        return valid_returns if len(valid_returns) > 5 else None
         
     except Exception as e:
-        print(f"Error applying strategy: {e}")
+        print(f"⚠️ Error applying strategy: {e}")
         return None
 
 
 def _perform_overfitting_tests(in_sample_metrics, out_sample_metrics):
     """Perform statistical tests to detect overfitting"""
-    results = {}
+    results = {
+        'sharpe_t_stat': 0.0,
+        'sharpe_p_value': 1.0,
+        'sortino_t_stat': 0.0,
+        'sortino_p_value': 1.0,
+        'is_overfitted': True,
+        'sharpe_degradation': 0.0,
+        'sortino_degradation': 0.0
+    }
     
-    # Sharpe ratio t-test
-    if (len(in_sample_metrics['sharpe_ratios']) > 0 and 
-        len(out_sample_metrics['sharpe_ratios']) > 0):
+    try:
+        # Sharpe ratio t-test
+        if (len(in_sample_metrics['sharpe_ratios']) > 0 and 
+            len(out_sample_metrics['sharpe_ratios']) > 0):
+            
+            in_sharpe = [x for x in in_sample_metrics['sharpe_ratios'] if np.isfinite(x)]
+            out_sharpe = [x for x in out_sample_metrics['sharpe_ratios'] if np.isfinite(x)]
+            
+            if len(in_sharpe) > 0 and len(out_sharpe) > 0:
+                try:
+                    sharpe_t_stat, sharpe_p_value = stats.ttest_ind(
+                        in_sharpe, out_sharpe, alternative='greater'
+                    )
+                    
+                    # Ensure values are numeric and finite
+                    if np.isfinite(sharpe_t_stat) and np.isfinite(sharpe_p_value):
+                        results['sharpe_t_stat'] = float(sharpe_t_stat)
+                        results['sharpe_p_value'] = float(sharpe_p_value)
+                except Exception as e:
+                    print(f"⚠️ Error in Sharpe t-test: {e}")
         
-        sharpe_t_stat, sharpe_p_value = stats.ttest_ind(
-            in_sample_metrics['sharpe_ratios'],
-            out_sample_metrics['sharpe_ratios'],
-            alternative='greater'
+        # Sortino ratio t-test
+        if (len(in_sample_metrics['sortino_ratios']) > 0 and 
+            len(out_sample_metrics['sortino_ratios']) > 0):
+            
+            in_sortino = [x for x in in_sample_metrics['sortino_ratios'] if np.isfinite(x)]
+            out_sortino = [x for x in out_sample_metrics['sortino_ratios'] if np.isfinite(x)]
+            
+            if len(in_sortino) > 0 and len(out_sortino) > 0:
+                try:
+                    sortino_t_stat, sortino_p_value = stats.ttest_ind(
+                        in_sortino, out_sortino, alternative='greater'
+                    )
+                    
+                    # Ensure values are numeric and finite
+                    if np.isfinite(sortino_t_stat) and np.isfinite(sortino_p_value):
+                        results['sortino_t_stat'] = float(sortino_t_stat)
+                        results['sortino_p_value'] = float(sortino_p_value)
+                except Exception as e:
+                    print(f"⚠️ Error in Sortino t-test: {e}")
+        
+        # Determine if strategy is overfitted
+        results['is_overfitted'] = (
+            results.get('sharpe_p_value', 1) < 0.05 or 
+            results.get('sortino_p_value', 1) < 0.05
         )
         
-        results['sharpe_t_stat'] = sharpe_t_stat
-        results['sharpe_p_value'] = sharpe_p_value
+        # Calculate degradation metrics
+        if (len(in_sample_metrics['sharpe_ratios']) > 0 and 
+            len(out_sample_metrics['sharpe_ratios']) > 0):
+            
+            in_sample_mean_sharpe = np.mean([x for x in in_sample_metrics['sharpe_ratios'] if np.isfinite(x)])
+            out_sample_mean_sharpe = np.mean([x for x in out_sample_metrics['sharpe_ratios'] if np.isfinite(x)])
+            
+            if np.isfinite(in_sample_mean_sharpe) and np.isfinite(out_sample_mean_sharpe) and abs(in_sample_mean_sharpe) > 1e-10:
+                results['sharpe_degradation'] = float(
+                    (in_sample_mean_sharpe - out_sample_mean_sharpe) / abs(in_sample_mean_sharpe)
+                )
+        
+        if (len(in_sample_metrics['sortino_ratios']) > 0 and 
+            len(out_sample_metrics['sortino_ratios']) > 0):
+            
+            in_sample_mean_sortino = np.mean([x for x in in_sample_metrics['sortino_ratios'] if np.isfinite(x)])
+            out_sample_mean_sortino = np.mean([x for x in out_sample_metrics['sortino_ratios'] if np.isfinite(x)])
+            
+            if np.isfinite(in_sample_mean_sortino) and np.isfinite(out_sample_mean_sortino) and abs(in_sample_mean_sortino) > 1e-10:
+                results['sortino_degradation'] = float(
+                    (in_sample_mean_sortino - out_sample_mean_sortino) / abs(in_sample_mean_sortino)
+                )
     
-    # Sortino ratio t-test
-    if (len(in_sample_metrics['sortino_ratios']) > 0 and 
-        len(out_sample_metrics['sortino_ratios']) > 0):
-        
-        sortino_t_stat, sortino_p_value = stats.ttest_ind(
-            in_sample_metrics['sortino_ratios'],
-            out_sample_metrics['sortino_ratios'],
-            alternative='greater'
-        )
-        
-        results['sortino_t_stat'] = sortino_t_stat
-        results['sortino_p_value'] = sortino_p_value
-    
-    # Determine if strategy is overfitted
-    results['is_overfitted'] = (
-        results.get('sharpe_p_value', 1) < 0.05 or 
-        results.get('sortino_p_value', 1) < 0.05
-    )
-    
-    # Calculate degradation metrics
-    if (len(in_sample_metrics['sharpe_ratios']) > 0 and 
-        len(out_sample_metrics['sharpe_ratios']) > 0):
-        
-        in_sample_mean_sharpe = np.mean(in_sample_metrics['sharpe_ratios'])
-        out_sample_mean_sharpe = np.mean(out_sample_metrics['sharpe_ratios'])
-        
-        results['sharpe_degradation'] = (
-            (in_sample_mean_sharpe - out_sample_mean_sharpe) / 
-            abs(in_sample_mean_sharpe) if in_sample_mean_sharpe != 0 else 0
-        )
-    
-    if (len(in_sample_metrics['sortino_ratios']) > 0 and 
-        len(out_sample_metrics['sortino_ratios']) > 0):
-        
-        in_sample_mean_sortino = np.mean(in_sample_metrics['sortino_ratios'])
-        out_sample_mean_sortino = np.mean(out_sample_metrics['sortino_ratios'])
-        
-        results['sortino_degradation'] = (
-            (in_sample_mean_sortino - out_sample_mean_sortino) / 
-            abs(in_sample_mean_sortino) if in_sample_mean_sortino != 0 else 0
-        )
+    except Exception as e:
+        print(f"⚠️ Error in statistical tests: {e}")
     
     return results
 
@@ -999,45 +1101,50 @@ def _generate_overfitting_recommendations(statistical_results):
     """Generate recommendations based on overfitting analysis"""
     recommendations = []
     
-    if statistical_results.get('is_overfitted', False):
-        recommendations.append(
-            "⚠️ OVERFITTING DETECTED: The strategy shows significant performance "
-            "degradation from in-sample to out-of-sample testing."
-        )
-        
-        # Specific recommendations based on degradation levels
-        sharpe_deg = statistical_results.get('sharpe_degradation', 0)
-        if sharpe_deg > 0.3:
+    try:
+        if statistical_results.get('is_overfitted', False):
             recommendations.append(
-                f"📉 Severe Sharpe ratio degradation ({sharpe_deg:.1%}). "
-                "Consider simplifying the strategy or using fewer parameters."
+                "⚠️ OVERFITTING DETECTED: The strategy shows significant performance "
+                "degradation from in-sample to out-of-sample testing."
             )
-        elif sharpe_deg > 0.1:
+            
+            # Specific recommendations based on degradation levels
+            sharpe_deg = statistical_results.get('sharpe_degradation', 0)
+            if sharpe_deg > 0.3:
+                recommendations.append(
+                    f"📉 Severe Sharpe ratio degradation ({sharpe_deg:.1%}). "
+                    "Consider simplifying the strategy or using fewer parameters."
+                )
+            elif sharpe_deg > 0.1:
+                recommendations.append(
+                    f"📉 Moderate Sharpe ratio degradation ({sharpe_deg:.1%}). "
+                    "Consider walk-forward optimization or parameter constraints."
+                )
+            
             recommendations.append(
-                f"📉 Moderate Sharpe ratio degradation ({sharpe_deg:.1%}). "
-                "Consider walk-forward optimization or parameter constraints."
+                "🔄 Recommended actions:\n"
+                "  • Use walk-forward optimization\n"
+                "  • Reduce parameter search space\n"
+                "  • Implement parameter stability constraints\n"
+                "  • Consider ensemble methods\n"
+                "  • Increase out-of-sample period"
             )
-        
-        recommendations.append(
-            "🔄 Recommended actions:\n"
-            "  • Use walk-forward optimization\n"
-            "  • Reduce parameter search space\n"
-            "  • Implement parameter stability constraints\n"
-            "  • Consider ensemble methods\n"
-            "  • Increase out-of-sample period"
-        )
-    else:
-        recommendations.append(
-            "✅ NO SIGNIFICANT OVERFITTING: The strategy maintains reasonable "
-            "performance from in-sample to out-of-sample testing."
-        )
-        
-        recommendations.append(
-            "💡 Continue monitoring:\n"
-            "  • Track performance over time\n"
-            "  • Consider additional validation periods\n"
-            "  • Monitor parameter stability"
-        )
+        else:
+            recommendations.append(
+                "✅ NO SIGNIFICANT OVERFITTING: The strategy maintains reasonable "
+                "performance from in-sample to out-of-sample testing."
+            )
+            
+            recommendations.append(
+                "💡 Continue monitoring:\n"
+                "  • Track performance over time\n"
+                "  • Consider additional validation periods\n"
+                "  • Monitor parameter stability"
+            )
+    
+    except Exception as e:
+        print(f"⚠️ Error generating recommendations: {e}")
+        recommendations = ["⚠️ Could not generate recommendations - manual review required"]
     
     return recommendations
 
@@ -1046,20 +1153,38 @@ def _create_detailed_ticker_analysis(optimization_results, test_set, in_sample_m
     """Create detailed analysis for each ticker"""
     detailed_results = {}
     
-    for i, ticker in enumerate(optimization_results['selected_tickers']):
-        if i < len(in_sample_metrics['sharpe_ratios']) and i < len(out_sample_metrics['sharpe_ratios']):
-            detailed_results[ticker] = {
-                'in_sample_sharpe': in_sample_metrics['sharpe_ratios'][i],
-                'out_sample_sharpe': out_sample_metrics['sharpe_ratios'][i],
-                'sharpe_degradation': (
-                    (in_sample_metrics['sharpe_ratios'][i] - out_sample_metrics['sharpe_ratios'][i]) /
-                    abs(in_sample_metrics['sharpe_ratios'][i])
-                    if in_sample_metrics['sharpe_ratios'][i] != 0 else 0
-                ),
-                'in_sample_sortino': in_sample_metrics['sortino_ratios'][i],
-                'out_sample_sortino': out_sample_metrics['sortino_ratios'][i],
-                'strategy_params': optimization_results['all_optimization_results'][ticker]['best_params']
-            }
+    try:
+        selected_tickers = optimization_results.get('selected_tickers', [])
+        all_opt_results = optimization_results.get('all_optimization_results', {})
+        
+        for i, ticker in enumerate(selected_tickers):
+            try:
+                if (i < len(in_sample_metrics['sharpe_ratios']) and 
+                    i < len(out_sample_metrics['sharpe_ratios']) and
+                    ticker in all_opt_results):
+                    
+                    in_sample_sharpe = in_sample_metrics['sharpe_ratios'][i]
+                    out_sample_sharpe = out_sample_metrics['sharpe_ratios'][i]
+                    
+                    # Calculate degradation safely
+                    sharpe_degradation = 0.0
+                    if abs(in_sample_sharpe) > 1e-10:
+                        sharpe_degradation = (in_sample_sharpe - out_sample_sharpe) / abs(in_sample_sharpe)
+                    
+                    detailed_results[ticker] = {
+                        'in_sample_sharpe': float(in_sample_sharpe),
+                        'out_sample_sharpe': float(out_sample_sharpe),
+                        'sharpe_degradation': float(sharpe_degradation) if np.isfinite(sharpe_degradation) else 0.0,
+                        'in_sample_sortino': float(in_sample_metrics['sortino_ratios'][i]),
+                        'out_sample_sortino': float(out_sample_metrics['sortino_ratios'][i]),
+                        'strategy_params': all_opt_results[ticker]['best_params']
+                    }
+            except Exception as e:
+                print(f"⚠️ Error analyzing {ticker}: {e}")
+                continue
+    
+    except Exception as e:
+        print(f"⚠️ Error creating detailed analysis: {e}")
     
     return detailed_results
 
@@ -1085,6 +1210,21 @@ def run_overfitting_analysis(optimization_results, test_set):
     print("🔍 Running Overfitting Analysis...")
     print("=" * 50)
     
+    # Validate inputs
+    if not optimization_results:
+        print("❌ Error: No optimization results provided")
+        return {
+            'error': 'No optimization results provided',
+            'statistical_tests': {'is_overfitted': True, 'sharpe_p_value': 1.0, 'sortino_p_value': 1.0}
+        }
+    
+    if test_set is None or test_set.empty:
+        print("❌ Error: No test set provided")
+        return {
+            'error': 'No test set provided',
+            'statistical_tests': {'is_overfitted': True, 'sharpe_p_value': 1.0, 'sortino_p_value': 1.0}
+        }
+    
     # Create comprehensive analysis
     analysis = create_overfitting_analysis_report(optimization_results, test_set)
     
@@ -1093,60 +1233,77 @@ def run_overfitting_analysis(optimization_results, test_set):
         return analysis
     
     # Display summary
-    summary = analysis['summary']
+    summary = analysis.get('summary', {})
     print(f"📊 SUMMARY STATISTICS")
-    print(f"Strategies tested: {summary['num_strategies_tested']}")
-    print(f"In-sample mean Sharpe: {summary['in_sample_mean_sharpe']:.3f}")
-    print(f"Out-sample mean Sharpe: {summary['out_sample_mean_sharpe']:.3f}")
-    print(f"In-sample mean Sortino: {summary['in_sample_mean_sortino']:.3f}")
-    print(f"Out-sample mean Sortino: {summary['out_sample_mean_sortino']:.3f}")
+    print(f"Strategies tested: {summary.get('num_strategies_tested', 0)}")
+    print(f"In-sample mean Sharpe: {summary.get('in_sample_mean_sharpe', 0):.3f}")
+    print(f"Out-sample mean Sharpe: {summary.get('out_sample_mean_sharpe', 0):.3f}")
+    print(f"In-sample mean Sortino: {summary.get('in_sample_mean_sortino', 0):.3f}")
+    print(f"Out-sample mean Sortino: {summary.get('out_sample_mean_sortino', 0):.3f}")
     
     # Display statistical test results
-    stats_results = analysis['statistical_tests']
+    stats_results = analysis.get('statistical_tests', {})
     print(f"\n📈 STATISTICAL TEST RESULTS")
-    print(f"Sharpe t-statistic: {stats_results.get('sharpe_t_stat', 'N/A'):.3f}")
-    print(f"Sharpe p-value: {stats_results.get('sharpe_p_value', 'N/A'):.3f}")
-    print(f"Sortino t-statistic: {stats_results.get('sortino_t_stat', 'N/A'):.3f}")
-    print(f"Sortino p-value: {stats_results.get('sortino_p_value', 'N/A'):.3f}")
     
-    # Interpretation of p-values
-    sharpe_p = stats_results.get('sharpe_p_value', 1.0)
-    sortino_p = stats_results.get('sortino_p_value', 1.0)
+    sharpe_t_stat = stats_results.get('sharpe_t_stat', 0.0)
+    sharpe_p_value = stats_results.get('sharpe_p_value', 1.0)
+    sortino_t_stat = stats_results.get('sortino_t_stat', 0.0)
+    sortino_p_value = stats_results.get('sortino_p_value', 1.0)
+    
+    print(f"Sharpe t-statistic: {sharpe_t_stat:.3f}")
+    print(f"Sharpe p-value: {sharpe_p_value:.3f}")
+    print(f"Sortino t-statistic: {sortino_t_stat:.3f}")
+    print(f"Sortino p-value: {sortino_p_value:.3f}")
     
     print(f"\n🎯 OVERFITTING STATUS: {'DETECTED' if stats_results.get('is_overfitted') else 'NOT DETECTED'}")
     
-    if sharpe_p < 0.05:
-        print(f"   ⚠️ Sharpe ratio shows significant degradation (p={sharpe_p:.3f})")
+    if sharpe_p_value < 0.05:
+        print(f"   ⚠️ Sharpe ratio shows significant degradation (p={sharpe_p_value:.3f})")
     else:
-        print(f"   ✅ Sharpe ratio degradation not significant (p={sharpe_p:.3f})")
+        print(f"   ✅ Sharpe ratio degradation not significant (p={sharpe_p_value:.3f})")
         
-    if sortino_p < 0.05:
-        print(f"   ⚠️ Sortino ratio shows significant degradation (p={sortino_p:.3f})")
+    if sortino_p_value < 0.05:
+        print(f"   ⚠️ Sortino ratio shows significant degradation (p={sortino_p_value:.3f})")
     else:
-        print(f"   ✅ Sortino ratio degradation not significant (p={sortino_p:.3f})")
+        print(f"   ✅ Sortino ratio degradation not significant (p={sortino_p_value:.3f})")
     
     # Display recommendations
     print(f"\n💡 RECOMMENDATIONS:")
-    for rec in analysis['recommendations']:
+    for rec in analysis.get('recommendations', []):
         print(f"  {rec}")
     
     # Display detailed results
     print(f"\n📋 DETAILED TICKER ANALYSIS:")
-    for ticker, details in analysis['detailed_results'].items():
-        print(f"\n{ticker}:")
-        print(f"  In-sample Sharpe: {details['in_sample_sharpe']:.3f}")
-        print(f"  Out-sample Sharpe: {details['out_sample_sharpe']:.3f}")
-        print(f"  Degradation: {details['sharpe_degradation']:.1%}")
-        print(f"  Strategy: {details['strategy_params']['strategy_type']}")
-        print(f"  Periods: {details['strategy_params']['short_period']}/{details['strategy_params']['long_period']}")
+    detailed_results = analysis.get('detailed_results', {})
+    if detailed_results:
+        for ticker, details in detailed_results.items():
+            print(f"\n{ticker}:")
+            print(f"  In-sample Sharpe: {details.get('in_sample_sharpe', 0):.3f}")
+            print(f"  Out-sample Sharpe: {details.get('out_sample_sharpe', 0):.3f}")
+            print(f"  Degradation: {details.get('sharpe_degradation', 0):.1%}")
+            strategy_params = details.get('strategy_params', {})
+            print(f"  Strategy: {strategy_params.get('strategy_type', 'Unknown')}")
+            print(f"  Periods: {strategy_params.get('short_period', 'N/A')}/{strategy_params.get('long_period', 'N/A')}")
+    else:
+        print("  No detailed results available")
     
     return analysis
+
 
 def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, max_iterations=5, target_stocks=2, parameter_iterations=None):
     """Find strategies that pass overfitting tests by trying different stock combinations"""
     
     print("🎯 ENHANCED STRATEGY SELECTION WITH STOCK ROTATION & OVERFITTING PROTECTION")
     print("=" * 80)
+    
+    # Input validation
+    if quotes_data is None or quotes_data.empty:
+        print("❌ Error: No quotes data provided")
+        return None
+    
+    if not available_tickers:
+        print("❌ Error: No available tickers provided")
+        return None
     
     # Default parameter configurations
     if parameter_iterations is None:
@@ -1170,7 +1327,8 @@ def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, m
         
         for combo_data in successful_combos:
             try:
-                combination, param_config_name = combo_data['combination'], combo_data['param_config']
+                combination = combo_data.get('combination', [])
+                param_config_name = combo_data.get('param_config', '')
                 param_config_ranges = next((config['ranges'] for config in parameter_iterations if config['name'] == param_config_name), None)
                 
                 if param_config_ranges is None:
@@ -1184,16 +1342,20 @@ def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, m
                 two_stock_results = find_optimal_portfolio_with_parameter_optimization(
                     quotes=train_data, max_stocks=2, n_jobs=1, heatmap_metric='sharpe', parameter_ranges=param_config_ranges)
                 
-                selected_count = len(two_stock_results['selected_tickers'])
+                if not two_stock_results:
+                    print(f"  ⚠️ No optimization results for {combination}")
+                    continue
+                
+                selected_count = len(two_stock_results.get('selected_tickers', []))
                 portfolio_sharpe = two_stock_results.get('portfolio_stats', {}).get('sharpe_ratio', 0)
                 
-                print(f"  📊 Selected {selected_count} stocks: {two_stock_results['selected_tickers']}")
+                print(f"  📊 Selected {selected_count} stocks: {two_stock_results.get('selected_tickers', [])}")
                 print(f"  📈 Portfolio Sharpe: {portfolio_sharpe:.3f}")
                 
                 if selected_count == 2 and portfolio_sharpe > best_sharpe:
                     best_two_stock_result = {
                         'optimization_results': two_stock_results, 'combination': combination, 'config': param_config_name,
-                        'sharpe': portfolio_sharpe, 'stability_ratio': combo_data['stability_ratio'], 'param_ranges': param_config_ranges}
+                        'sharpe': portfolio_sharpe, 'stability_ratio': combo_data.get('stability_ratio', 0), 'param_ranges': param_config_ranges}
                     best_sharpe = portfolio_sharpe
                     print(f"  ✅ New best 2-stock portfolio!")
             except Exception as e:
@@ -1206,125 +1368,141 @@ def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, m
     print(f"Creating combinations of {target_stocks} stocks...")
     
     # Generate stock combinations (limit to 20 for performance)
-    all_combinations = list(combinations(available_tickers, target_stocks))
-    if len(all_combinations) > 20:
-        random.seed(42)
-        stock_combinations = random.sample(all_combinations, 20)
-        print(f"Testing 20 random combinations out of {len(all_combinations)} possible")
-    else:
-        stock_combinations = all_combinations
-        print(f"Testing all {len(stock_combinations)} combinations")
+    try:
+        all_combinations = list(combinations(available_tickers, target_stocks))
+        if len(all_combinations) > 20:
+            random.seed(42)
+            stock_combinations = random.sample(all_combinations, 20)
+            print(f"Testing 20 random combinations out of {len(all_combinations)} possible")
+        else:
+            stock_combinations = all_combinations
+            print(f"Testing all {len(stock_combinations)} combinations")
+    except Exception as e:
+        print(f"❌ Error generating combinations: {e}")
+        return None
     
     # Main optimization loop
     for combo_idx, stock_combo in enumerate(stock_combinations):
         print(f"\n🔄 STOCK COMBINATION {combo_idx + 1}/{len(stock_combinations)}: {list(stock_combo)}")
         print("-" * 60)
         
-        combo_quotes = quotes_data[list(stock_combo)].dropna()
-        if len(combo_quotes) < 500:
-            print(f"⚠️ Insufficient data for {stock_combo} ({len(combo_quotes)} rows)")
-            continue
-        
-        combo_best_results, combo_best_stability = None, 0
-        
-        for iteration, param_config in enumerate(parameter_iterations):
-            if iteration >= max_iterations: break
+        try:
+            combo_quotes = quotes_data[list(stock_combo)].dropna()
+            if len(combo_quotes) < 500:
+                print(f"⚠️ Insufficient data for {stock_combo} ({len(combo_quotes)} rows)")
+                continue
             
-            print(f"  🔄 ITERATION {iteration + 1}: {param_config['name']} Parameters")
+            combo_best_results, combo_best_stability = None, 0
             
-            attempt_record = {
-                'stock_combo': list(stock_combo), 'param_config': param_config['name'], 'is_overfitted': True,
-                'p_value': 1.0, 'train_sharpe': 0.0, 'test_sharpe': 0.0, 'selected_tickers': list(stock_combo),
-                'stability_ratio': 0.0, 'error': None}
-            
-            total_rows = len(combo_quotes)
-            train_size = int(0.8 * total_rows)
-            training_set, test_set = combo_quotes.iloc[:train_size], combo_quotes.iloc[train_size:]
-            
-            try:
-                optimization_results = find_optimal_portfolio_with_parameter_optimization(
-                    quotes=training_set, max_stocks=target_stocks, n_jobs=1, heatmap_metric='sharpe', parameter_ranges=param_config['ranges'])
+            for iteration, param_config in enumerate(parameter_iterations):
+                if iteration >= max_iterations: break
                 
-                if 'selected_tickers' in optimization_results:
-                    attempt_record['selected_tickers'] = optimization_results['selected_tickers']
+                print(f"  🔄 ITERATION {iteration + 1}: {param_config['name']} Parameters")
                 
-                overfitting_analysis = run_overfitting_analysis(optimization_results, test_set)
+                attempt_record = {
+                    'stock_combo': list(stock_combo), 'param_config': param_config['name'], 'is_overfitted': True,
+                    'p_value': 1.0, 'train_sharpe': 0.0, 'test_sharpe': 0.0, 'selected_tickers': list(stock_combo),
+                    'stability_ratio': 0.0, 'error': None
+                }
                 
-                if overfitting_analysis and 'statistical_tests' in overfitting_analysis:
-                    is_overfitted = overfitting_analysis['statistical_tests'].get('is_overfitted', True)
-                    sharpe_p_value = overfitting_analysis['statistical_tests'].get('sharpe_p_value', 1.0)
-                    attempt_record.update({'is_overfitted': is_overfitted, 'p_value': sharpe_p_value})
+                try:
+                    total_rows = len(combo_quotes)
+                    train_size = int(0.8 * total_rows)
+                    training_set, test_set = combo_quotes.iloc[:train_size], combo_quotes.iloc[train_size:]
                     
-                    if 'summary' in overfitting_analysis:
-                        summary = overfitting_analysis['summary']
-                        attempt_record.update({
-                            'train_sharpe': summary.get('in_sample_mean_sharpe', 0.0),
-                            'test_sharpe': summary.get('out_sample_mean_sharpe', 0.0)})
-                else:
-                    print("    ⚠️ Overfitting analysis failed - assuming overfitted")
-                    is_overfitted, sharpe_p_value = True, 1.0
-                
-                print(f"    📊 Holdout Test: {'❌ OVERFITTED' if is_overfitted else '✅ STABLE'} (p={sharpe_p_value:.3f})")
-                
-                if not is_overfitted:
-                    print("    🔄 Running walk-forward validation...")
-                    wf_results = walk_forward_validation(combo_quotes, param_config['ranges'], validation_periods=3)
+                    optimization_results = find_optimal_portfolio_with_parameter_optimization(
+                        quotes=training_set, max_stocks=target_stocks, n_jobs=1, heatmap_metric='sharpe', parameter_ranges=param_config['ranges'])
                     
-                    if wf_results:
-                        stable_periods = sum(1 for result in wf_results if not result.get('is_overfitted', True))
-                        stability_ratio = stable_periods / len(wf_results)
+                    if not optimization_results:
+                        print(f"    ⚠️ No optimization results in iteration {iteration + 1}")
+                        attempt_record['error'] = "No optimization results"
+                        all_attempts.append(attempt_record)
+                        continue
+                    
+                    if 'selected_tickers' in optimization_results:
+                        attempt_record['selected_tickers'] = optimization_results['selected_tickers']
+                    
+                    overfitting_analysis = run_overfitting_analysis(optimization_results, test_set)
+                    
+                    if overfitting_analysis and 'statistical_tests' in overfitting_analysis:
+                        is_overfitted = overfitting_analysis['statistical_tests'].get('is_overfitted', True)
+                        sharpe_p_value = overfitting_analysis['statistical_tests'].get('sharpe_p_value', 1.0)
+                        attempt_record.update({'is_overfitted': is_overfitted, 'p_value': sharpe_p_value})
+                        
+                        if 'summary' in overfitting_analysis:
+                            summary = overfitting_analysis['summary']
+                            attempt_record.update({
+                                'train_sharpe': summary.get('in_sample_mean_sharpe', 0.0),
+                                'test_sharpe': summary.get('out_sample_mean_sharpe', 0.0)})
                     else:
-                        stability_ratio = 0
+                        print("    ⚠️ Overfitting analysis failed - assuming overfitted")
+                        is_overfitted, sharpe_p_value = True, 1.0
                     
-                    print(f"    📈 Walk-Forward Stability: {stable_periods if wf_results else 0}/{len(wf_results) if wf_results else 0} ({stability_ratio:.1%})")
-                    attempt_record.update({'stability_ratio': stability_ratio, 'walk_forward_results': wf_results})
+                    print(f"    📊 Holdout Test: {'❌ OVERFITTED' if is_overfitted else '✅ STABLE'} (p={sharpe_p_value:.3f})")
                     
-                    # Track successful 2-stock combinations
-                    if stability_ratio >= 0.5 and len(optimization_results['selected_tickers']) == 2:
-                        successful_two_stock_combos.append({
-                            'combination': list(stock_combo), 'selected_tickers': optimization_results['selected_tickers'],
-                            'stability_ratio': stability_ratio, 'param_config': param_config['name'],
-                            'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis, 'wf_results': wf_results})
-                        print(f"    ✅ 2-STOCK SUCCESS! Added to successful combinations list.")
-                    
-                    # Check for validation success
-                    if stability_ratio >= 0.6:
-                        print("    ✅ STRATEGY VALIDATION PASSED!")
-                        return {
-                            'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis,
-                            'walk_forward_results': wf_results, 'stability_ratio': stability_ratio, 'iteration': iteration + 1,
-                            'parameter_config': param_config['name'], 'stock_combination': list(stock_combo),
-                            'validation_status': 'PASSED', 'all_attempts': all_attempts + [attempt_record],
-                            'successful_two_stock_combos': successful_two_stock_combos}
-                    elif stability_ratio > best_stability:
-                        print(f"    📈 New best overall stability ratio: {stability_ratio:.1%}")
-                        best_results = {
-                            'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis,
-                            'walk_forward_results': wf_results, 'stability_ratio': stability_ratio, 'iteration': iteration + 1,
-                            'parameter_config': param_config['name'], 'stock_combination': list(stock_combo),
-                            'validation_status': 'BEST_AVAILABLE', 'all_attempts': all_attempts + [attempt_record],
-                            'successful_two_stock_combos': successful_two_stock_combos}
-                        best_stability = stability_ratio
-                    
-                    if stability_ratio > combo_best_stability:
-                        combo_best_results = {
-                            'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis,
-                            'walk_forward_results': wf_results, 'stability_ratio': stability_ratio, 'parameter_config': param_config['name']}
-                        combo_best_stability = stability_ratio
-                else:
-                    print("    ❌ Failed holdout test - trying simpler parameters...")
-                    
-            except Exception as e:
-                print(f"    ⚠️ Error in iteration {iteration + 1}: {e}")
-                attempt_record['error'] = str(e)
+                    if not is_overfitted:
+                        print("    🔄 Running walk-forward validation...")
+                        wf_results = walk_forward_validation(combo_quotes, param_config['ranges'], validation_periods=3)
+                        
+                        if wf_results:
+                            stable_periods = sum(1 for result in wf_results if not result.get('is_overfitted', True))
+                            stability_ratio = stable_periods / len(wf_results)
+                        else:
+                            stability_ratio = 0
+                        
+                        print(f"    📈 Walk-Forward Stability: {stable_periods if wf_results else 0}/{len(wf_results) if wf_results else 0} ({stability_ratio:.1%})")
+                        attempt_record.update({'stability_ratio': stability_ratio, 'walk_forward_results': wf_results})
+                        
+                        # Track successful 2-stock combinations
+                        if stability_ratio >= 0.5 and len(optimization_results.get('selected_tickers', [])) == 2:
+                            successful_two_stock_combos.append({
+                                'combination': list(stock_combo), 'selected_tickers': optimization_results['selected_tickers'],
+                                'stability_ratio': stability_ratio, 'param_config': param_config['name'],
+                                'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis, 'wf_results': wf_results})
+                            print(f"    ✅ 2-STOCK SUCCESS! Added to successful combinations list.")
+                        
+                        # Check for validation success
+                        if stability_ratio >= 0.6:
+                            print("    ✅ STRATEGY VALIDATION PASSED!")
+                            return {
+                                'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis,
+                                'walk_forward_results': wf_results, 'stability_ratio': stability_ratio, 'iteration': iteration + 1,
+                                'parameter_config': param_config['name'], 'stock_combination': list(stock_combo),
+                                'validation_status': 'PASSED', 'all_attempts': all_attempts + [attempt_record],
+                                'successful_two_stock_combos': successful_two_stock_combos}
+                        elif stability_ratio > best_stability:
+                            print(f"    📈 New best overall stability ratio: {stability_ratio:.1%}")
+                            best_results = {
+                                'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis,
+                                'walk_forward_results': wf_results, 'stability_ratio': stability_ratio, 'iteration': iteration + 1,
+                                'parameter_config': param_config['name'], 'stock_combination': list(stock_combo),
+                                'validation_status': 'BEST_AVAILABLE', 'all_attempts': all_attempts + [attempt_record],
+                                'successful_two_stock_combos': successful_two_stock_combos}
+                            best_stability = stability_ratio
+                        
+                        if stability_ratio > combo_best_stability:
+                            combo_best_results = {
+                                'optimization_results': optimization_results, 'overfitting_analysis': overfitting_analysis,
+                                'walk_forward_results': wf_results, 'stability_ratio': stability_ratio, 'parameter_config': param_config['name']}
+                            combo_best_stability = stability_ratio
+                    else:
+                        print("    ❌ Failed holdout test - trying simpler parameters...")
+                        
+                except Exception as e:
+                    print(f"    ⚠️ Error in iteration {iteration + 1}: {e}")
+                    attempt_record['error'] = str(e)
+                
+                all_attempts.append(attempt_record)
             
-            all_attempts.append(attempt_record)
-        
-        # Summary for this stock combination
-        if combo_best_results:
-            print(f"  📊 Best for {stock_combo}: {combo_best_stability:.1%} stability ({combo_best_results['parameter_config']})")
-        else:
-            print(f"  📊 No stable strategy found for {stock_combo}")
+            # Summary for this stock combination
+            if combo_best_results:
+                print(f"  📊 Best for {stock_combo}: {combo_best_stability:.1%} stability ({combo_best_results.get('parameter_config', 'Unknown')})")
+            else:
+                print(f"  📊 No stable strategy found for {stock_combo}")
+                
+        except Exception as e:
+            print(f"⚠️ Error processing stock combination {stock_combo}: {e}")
+            continue
     
     # Print summary of all attempts
     print(f"\n📊 SUMMARY OF ALL ATTEMPTS:")
@@ -1359,7 +1537,7 @@ def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, m
         print("\n🎯 ATTEMPTING TO FORCE 2-STOCK SELECTION FROM SUCCESSFUL COMBINATIONS...")
         forced_result = force_two_stock_selection_internal(successful_two_stock_combos)
         
-        if forced_result and len(forced_result['optimization_results']['selected_tickers']) == 2:
+        if forced_result and len(forced_result.get('optimization_results', {}).get('selected_tickers', [])) == 2:
             print(f"\n✅ SUCCESSFULLY FORCED 2-STOCK SELECTION!")
             print(f"Combination: {forced_result['combination']}")
             print(f"Selected tickers: {forced_result['optimization_results']['selected_tickers']}")
@@ -1382,47 +1560,397 @@ def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, m
         print("\n❌ NO VIABLE STRATEGIES FOUND - Consider:")
         print("  • Expanding stock universe further\n  • Using different technical indicators\n  • Implementing ensemble methods\n  • Reducing target number of stocks")
         return None
+
+
+def walk_forward_validation(quotes_data, parameter_ranges, is_overfitted=None, sharpe_p_value=None, 
+                          overfitting_analysis=None, selected_tickers=None, risk_free_rate=None, 
+                          validation_periods=4):
+    """
+    Implement walk-forward optimization to reduce overfitting and provide final strategy assessment
+    """
     
-def walk_forward_validation(quotes_data, parameter_ranges, validation_periods=3):
-    """Implement walk-forward optimization to reduce overfitting"""
+    # Input validation
+    if quotes_data is None or quotes_data.empty:
+        print("⚠️ No quotes data provided for walk-forward validation")
+        return []
+    
+    if not parameter_ranges:
+        print("⚠️ No parameter ranges provided for walk-forward validation")
+        return []
+    
+    # Determine if this is a basic call (backwards compatibility) or full analysis
+    is_full_analysis = all(param is not None for param in [is_overfitted, sharpe_p_value, overfitting_analysis, selected_tickers, risk_free_rate])
+    
+    # Run the core walk-forward validation
+    print(f"\n🔄 Running walk-forward validation with {validation_periods} periods...")
+    
     total_length = len(quotes_data)
     period_length = total_length // validation_periods
     all_results = []
     
-    for i in range(validation_periods - 1):
-        train_start, train_end = i * period_length, (i + 2) * period_length
-        test_start, test_end = train_end, min(train_end + period_length, total_length)
-        
-        if test_end <= test_start: continue
-        
-        train_data, test_data = quotes_data.iloc[train_start:train_end], quotes_data.iloc[test_start:test_end]
-        
+    for i in range(validation_periods - 1):  # Leave last period for final test
         try:
+            # Training window
+            train_start = i * period_length
+            train_end = (i + 2) * period_length  # 2 periods for training
+            
+            # Test window  
+            test_start = train_end
+            test_end = min(test_start + period_length, total_length)
+            
+            if test_end <= test_start:
+                continue
+                
+            train_data = quotes_data.iloc[train_start:train_end]
+            test_data = quotes_data.iloc[test_start:test_end]
+            
+            print(f"   Period {i+1}: Train {train_data.index[0]} to {train_data.index[-1]}")
+            print(f"   Period {i+1}: Test {test_data.index[0]} to {test_data.index[-1]}")
+            
+            # Optimize on training period
             period_results = find_optimal_portfolio_with_parameter_optimization(
-                quotes=train_data, max_stocks=2, n_jobs=1, heatmap_metric='sharpe', parameter_ranges=parameter_ranges)
+                quotes=train_data,
+                max_stocks=2,
+                n_jobs=1,  # Reduced for stability
+                heatmap_metric='sharpe',
+                parameter_ranges=parameter_ranges
+            )
+            
+            if not period_results:
+                print(f"   ⚠️ No optimization results for period {i+1}")
+                all_results.append({
+                    'period': i + 1,
+                    'train_sharpe': 0.0,
+                    'test_sharpe': 0.0,
+                    'is_overfitted': True,
+                    'p_value': 1.0,
+                    'selected_tickers': [],
+                    'error': 'No optimization results'
+                })
+                continue
+            
+            # Test on validation period
             validation_analysis = run_overfitting_analysis(period_results, test_data)
             
+            # Create result object
             result = {
-                'period': i + 1, 'train_sharpe': 0.0, 'test_sharpe': 0.0, 'is_overfitted': True,
-                'p_value': 1.0, 'selected_tickers': period_results.get('selected_tickers', [])}
+                'period': i + 1,
+                'train_sharpe': 0.0,
+                'test_sharpe': 0.0,
+                'is_overfitted': True,
+                'p_value': 1.0,
+                'selected_tickers': period_results.get('selected_tickers', [])
+            }
             
+            # Extract metrics if available
             if validation_analysis and 'summary' in validation_analysis:
                 summary = validation_analysis['summary']
                 result.update({
                     'train_sharpe': summary.get('in_sample_mean_sharpe', 0.0),
-                    'test_sharpe': summary.get('out_sample_mean_sharpe', 0.0)})
+                    'test_sharpe': summary.get('out_sample_mean_sharpe', 0.0)
+                })
             
             if validation_analysis and 'statistical_tests' in validation_analysis:
                 tests = validation_analysis['statistical_tests']
                 result.update({
                     'is_overfitted': tests.get('is_overfitted', True),
-                    'p_value': tests.get('sharpe_p_value', 1.0)})
+                    'p_value': tests.get('sharpe_p_value', 1.0)
+                })
             
             all_results.append(result)
+            
         except Exception as e:
-            print(f"       ⚠️ Error in period {i+1}: {e}")
+            print(f"   ⚠️ Error in period {i+1}: {e}")
             all_results.append({
-                'period': i + 1, 'train_sharpe': 0.0, 'test_sharpe': 0.0, 'is_overfitted': True,
-                'p_value': 1.0, 'selected_tickers': [], 'error': str(e)})
+                'period': i + 1,
+                'train_sharpe': 0.0,
+                'test_sharpe': 0.0,
+                'is_overfitted': True,
+                'p_value': 1.0,
+                'selected_tickers': [],
+                'error': str(e)
+            })
     
-    return all_results
+    # If basic call, return just the results list (backwards compatibility)
+    if not is_full_analysis:
+        return all_results
+    
+    # Full analysis mode - create comprehensive results
+    validation_results = {
+        'wf_results': all_results,
+        'stability_ratio': 0.0,
+        'final_status': '',
+        'recommendations': [],
+        'metrics': {}
+    }
+    
+    # Analyze walk-forward results
+    print("\n📊 WALK-FORWARD VALIDATION RESULTS:")
+    print("-" * 50)
+    stable_periods = 0
+    total_periods = len(all_results)
+    
+    for result in all_results:
+        if 'error' in result:
+            print(f"Period {result['period']}: ❌ ERROR - {result['error']}")
+            continue
+            
+        status = "❌ OVERFITTED" if result['is_overfitted'] else "✅ STABLE"
+        print(f"Period {result['period']}: {status}")
+        print(f"  Train Sharpe: {result['train_sharpe']:.3f}")
+        print(f"  Test Sharpe: {result['test_sharpe']:.3f}")
+        print(f"  Tickers: {result['selected_tickers']}")
+        
+        if not result['is_overfitted']:
+            stable_periods += 1
+    
+    stability_ratio = stable_periods / total_periods if total_periods > 0 else 0
+    validation_results['stability_ratio'] = stability_ratio
+    
+    print(f"\n📈 STABILITY SUMMARY:")
+    print(f"Stable periods: {stable_periods}/{total_periods} ({stability_ratio:.1%})")
+    
+    if stability_ratio >= 0.6:
+        print("✅ Strategy shows reasonable stability across time periods")
+    else:
+        print("⚠️ Strategy remains unstable - consider further simplification")
+    
+    # Final Strategy Validation Summary
+    print("\n" + "="*60)
+    print("📋 FINAL STRATEGY VALIDATION SUMMARY")
+    print("="*60)
+    
+    # Strategy assessment
+    if is_overfitted:
+        validation_results['final_status'] = 'NEEDS_IMPROVEMENT'
+        print(f"🎯 STRATEGY STATUS: NEEDS IMPROVEMENT")
+        print(f"Current Status: OVERFITTED (p-value: {sharpe_p_value:.4f})")
+        print(f"\n⚠️ REQUIRED ACTIONS:")
+        recommendations = [
+            "❌ Do not deploy current strategy",
+            "🔧 Review walk-forward validation results", 
+            "📉 Further reduce parameter complexity",
+            "🎯 Focus on stable strategies only",
+            "📊 Consider longer out-of-sample testing"
+        ]
+        for rec in recommendations:
+            print(f"  {rec}")
+        validation_results['recommendations'] = recommendations
+    else:
+        validation_results['final_status'] = 'READY_FOR_DEPLOYMENT'
+        print(f"🎯 STRATEGY STATUS: READY FOR DEPLOYMENT")
+        print(f"✅ Passed overfitting tests (p-value: {sharpe_p_value:.4f})")
+        print(f"\n💡 DEPLOYMENT RECOMMENDATIONS:")
+        recommendations = [
+            "✅ Strategy appears robust",
+            "📊 Monitor performance closely",
+            "🎯 Consider paper trading first", 
+            "📈 Set up regular re-optimization",
+            "⚖️ Implement risk management"
+        ]
+        for rec in recommendations:
+            print(f"  {rec}")
+        validation_results['recommendations'] = recommendations
+    
+    # Store metrics safely
+    try:
+        validation_results['metrics'] = {
+            'selected_tickers': selected_tickers if selected_tickers else [],
+            'portfolio_size': len(selected_tickers) if selected_tickers else 0,
+            'training_sharpe': overfitting_analysis.get('summary', {}).get('in_sample_mean_sharpe', 0.0) if overfitting_analysis else 0.0,
+            'testing_sharpe': overfitting_analysis.get('summary', {}).get('out_sample_mean_sharpe', 0.0) if overfitting_analysis else 0.0,
+            'risk_free_rate': risk_free_rate if risk_free_rate else 0.0,
+            'p_value': sharpe_p_value if sharpe_p_value else 1.0,
+            'is_overfitted': is_overfitted if is_overfitted is not None else True
+        }
+        
+        print(f"\n📊 STRATEGY METRICS:")
+        print(f"Selected tickers: {validation_results['metrics']['selected_tickers']}")
+        print(f"Portfolio size: {validation_results['metrics']['portfolio_size']} stocks")
+        print(f"Training Sharpe: {validation_results['metrics']['training_sharpe']:.3f}")
+        print(f"Testing Sharpe: {validation_results['metrics']['testing_sharpe']:.3f}")
+        print(f"Risk-free rate: {validation_results['metrics']['risk_free_rate']:.3%}")
+    except Exception as e:
+        print(f"⚠️ Error storing metrics: {e}")
+        validation_results['metrics'] = {}
+    
+    return validation_results
+
+def walk_forward_validation_check(quotes_data, parameter_ranges, is_overfitted, sharpe_p_value, 
+                          overfitting_analysis, selected_tickers, risk_free_rate, 
+                          validation_periods=4):
+    """
+    Implement walk-forward optimization to reduce overfitting and provide final strategy assessment
+    
+    Parameters:
+    -----------
+    quotes_data : pd.DataFrame
+        Historical price data
+    parameter_ranges : dict
+        Parameter ranges for optimization
+    is_overfitted : bool
+        Whether the strategy is overfitted
+    sharpe_p_value : float
+        P-value from overfitting test
+    overfitting_analysis : dict
+        Results from overfitting analysis
+    selected_tickers : list
+        Selected ticker symbols
+    risk_free_rate : float
+        Risk-free rate for calculations
+    validation_periods : int
+        Number of periods for walk-forward validation
+        
+    Returns:
+    --------
+    dict : Comprehensive validation results and recommendations
+    """
+    
+    # Initialize results dictionary
+    validation_results = {
+        'wf_results': [],
+        'stability_ratio': 0.0,
+        'final_status': '',
+        'recommendations': [],
+        'metrics': {}
+    }
+    
+    # Run walk-forward validation if overfitting detected
+    if is_overfitted:
+        print("\n🔄 Running walk-forward validation (this may take a few minutes...)")
+        
+        total_length = len(quotes_data)
+        period_length = total_length // validation_periods
+        all_results = []
+        
+        for i in range(validation_periods - 1):  # Leave last period for final test
+            # Training window
+            train_start = i * period_length
+            train_end = (i + 2) * period_length  # 2 periods for training
+            
+            # Test window
+            test_start = train_end
+            test_end = min(test_start + period_length, total_length)
+            
+            if test_end <= test_start:
+                continue
+                
+            train_data = quotes_data.iloc[train_start:train_end]
+            test_data = quotes_data.iloc[test_start:test_end]
+            
+            print(f"   Period {i+1}: Train {train_data.index[0]} to {train_data.index[-1]}")
+            print(f"   Period {i+1}: Test {test_data.index[0]} to {test_data.index[-1]}")
+            
+            # Optimize on training period
+            try:
+                period_results = find_optimal_portfolio_with_parameter_optimization(
+                    quotes=train_data,
+                    max_stocks=2,
+                    n_jobs=2,  # Reduced for stability
+                    heatmap_metric='sharpe',
+                    parameter_ranges=parameter_ranges
+                )
+                
+                # Test on validation period
+                validation_analysis = run_overfitting_analysis(period_results, test_data)
+                
+                all_results.append({
+                    'period': i + 1,
+                    'train_sharpe': validation_analysis['summary']['in_sample_mean_sharpe'],
+                    'test_sharpe': validation_analysis['summary']['out_sample_mean_sharpe'],
+                    'is_overfitted': validation_analysis['statistical_tests']['is_overfitted'],
+                    'selected_tickers': period_results['selected_tickers']
+                })
+                
+            except Exception as e:
+                print(f"   ⚠️ Error in period {i+1}: {e}")
+                continue
+        
+        validation_results['wf_results'] = all_results
+        
+        # Analyze walk-forward results
+        print("\n📊 WALK-FORWARD VALIDATION RESULTS:")
+        print("-" * 50)
+        stable_periods = 0
+        total_periods = len(all_results)
+        
+        for result in all_results:
+            status = "❌ OVERFITTED" if result['is_overfitted'] else "✅ STABLE"
+            print(f"Period {result['period']}: {status}")
+            print(f"  Train Sharpe: {result['train_sharpe']:.3f}")
+            print(f"  Test Sharpe: {result['test_sharpe']:.3f}")
+            print(f"  Tickers: {result['selected_tickers']}")
+            
+            if not result['is_overfitted']:
+                stable_periods += 1
+        
+        stability_ratio = stable_periods / total_periods if total_periods > 0 else 0
+        validation_results['stability_ratio'] = stability_ratio
+        
+        print(f"\n📈 STABILITY SUMMARY:")
+        print(f"Stable periods: {stable_periods}/{total_periods} ({stability_ratio:.1%})")
+        
+        if stability_ratio >= 0.6:
+            print("✅ Strategy shows reasonable stability across time periods")
+        else:
+            print("⚠️ Strategy remains unstable - consider further simplification")
+    else:
+        print("\n✅ Skipping walk-forward validation - no overfitting detected")
+        validation_results['stability_ratio'] = 1.0  # Assume stable if not overfitted
+    
+    # Final Strategy Validation Summary
+    print("\n" + "="*60)
+    print("📋 FINAL STRATEGY VALIDATION SUMMARY")
+    print("="*60)
+    
+    # Strategy assessment
+    if is_overfitted:
+        validation_results['final_status'] = 'NEEDS_IMPROVEMENT'
+        print(f"🎯 STRATEGY STATUS: NEEDS IMPROVEMENT")
+        print(f"Current Status: OVERFITTED (p-value: {sharpe_p_value:.4f})")
+        print(f"\n⚠️ REQUIRED ACTIONS:")
+        recommendations = [
+            "❌ Do not deploy current strategy",
+            "🔧 Review walk-forward validation results", 
+            "📉 Further reduce parameter complexity",
+            "🎯 Focus on stable strategies only",
+            "📊 Consider longer out-of-sample testing"
+        ]
+        for rec in recommendations:
+            print(f"  {rec}")
+        validation_results['recommendations'] = recommendations
+    else:
+        validation_results['final_status'] = 'READY_FOR_DEPLOYMENT'
+        print(f"🎯 STRATEGY STATUS: READY FOR DEPLOYMENT")
+        print(f"✅ Passed overfitting tests (p-value: {sharpe_p_value:.4f})")
+        print(f"\n💡 DEPLOYMENT RECOMMENDATIONS:")
+        recommendations = [
+            "✅ Strategy appears robust",
+            "📊 Monitor performance closely",
+            "🎯 Consider paper trading first", 
+            "📈 Set up regular re-optimization",
+            "⚖️ Implement risk management"
+        ]
+        for rec in recommendations:
+            print(f"  {rec}")
+        validation_results['recommendations'] = recommendations
+    
+    # Store metrics
+    validation_results['metrics'] = {
+        'selected_tickers': selected_tickers,
+        'portfolio_size': len(selected_tickers),
+        'training_sharpe': overfitting_analysis['summary']['in_sample_mean_sharpe'],
+        'testing_sharpe': overfitting_analysis['summary']['out_sample_mean_sharpe'],
+        'risk_free_rate': risk_free_rate,
+        'p_value': sharpe_p_value,
+        'is_overfitted': is_overfitted
+    }
+    
+    print(f"\n📊 STRATEGY METRICS:")
+    print(f"Selected tickers: {selected_tickers}")
+    print(f"Portfolio size: {len(selected_tickers)} stocks")
+    print(f"Training Sharpe: {overfitting_analysis['summary']['in_sample_mean_sharpe']:.3f}")
+    print(f"Testing Sharpe: {overfitting_analysis['summary']['out_sample_mean_sharpe']:.3f}")
+    print(f"Risk-free rate: {risk_free_rate:.3%}")
+    
+    return validation_results
