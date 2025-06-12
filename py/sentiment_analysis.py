@@ -1,4 +1,6 @@
 # Import additional libraries for sentiment analysis
+import polars as pl
+import pandas as pd
 from textblob import TextBlob
 import re
 from collections import defaultdict
@@ -102,18 +104,139 @@ def calculate_sector_averages(sentiment_df, fundamentals_pandas):
         for sector, metrics in sector_metrics.items() if metrics
     }
 
-def get_fundamental_value(symbol, column, default=0):
+def get_fundamental_value(symbol, column, default=0, fundamentals_df=None):
     """Safely get fundamental data value for a symbol"""
-    # This function needs access to fundamentals_pandas from the calling scope
-    # We'll modify this to accept it as a parameter
-    import pandas as pd
+    if fundamentals_df is None:
+        return default
+    
     try:
-        # Try to access the global fundamentals_pandas if it exists
-        import __main__
-        if hasattr(__main__, 'fundamentals_pandas'):
-            fundamentals_pandas = __main__.fundamentals_pandas
-            return fundamentals_pandas.loc[symbol, column] if symbol in fundamentals_pandas.index else default
+        if symbol in fundamentals_df.index:
+            value = fundamentals_df.loc[symbol, column]
+            # Handle NaN values
+            if pd.isna(value):
+                return default
+            return value
         else:
             return default
-    except:
+    except (KeyError, IndexError):
         return default
+
+def process_sentiment_analysis(news_df, fundamentals_path='data/fundamentals_stock.csv', 
+                             min_articles=3, min_news_score=0.45, display_results=True):
+    """
+    Process sentiment analysis by combining news data with fundamental stock data.
+    
+    Parameters:
+    -----------
+    news_df : pl.DataFrame
+        News data with sentiment information
+    fundamentals_path : str
+        Path to fundamentals CSV file
+    min_articles : int
+        Minimum articles required in last week
+    min_news_score : float
+        Minimum company news score threshold
+    display_results : bool
+        Whether to display results
+        
+    Returns:
+    --------
+    dict : Contains comprehensive_screened, sector_summary, and fundamentals_pandas
+    """
+    import pandas as pd
+    from IPython.display import display
+    
+    # Load fundamental data
+    print("📊 Loading fundamental stock data...")
+    fundamentals_df = pl.read_csv(fundamentals_path)
+    fundamentals_pandas = fundamentals_df.to_pandas().set_index('Ticker')
+
+    # Prepare ticker universe
+    all_tickers = set(news_df['symbol'].to_list() + fundamentals_df['Ticker'].to_list())
+    EXCLUDED_SYMBOLS = {'AI', 'S', 'A', 'U', 'E', 'US', 'ET', 'TSXV', 'CODI', 'C'}
+
+    print(f"📈 Processing {len(fundamentals_df)} stocks across {len(all_tickers)} unique tickers")
+
+    # Execute sentiment analysis
+    print("🔍 Analyzing news sentiment by stock symbol...")
+    sentiment_metrics = calculate_stock_sentiment_metrics(news_df, all_tickers, EXCLUDED_SYMBOLS)
+
+    # Create sentiment dataframe
+    sentiment_df = pl.DataFrame([{
+        "symbol": symbol,
+        "articlesInLastWeek": metrics["articlesInLastWeek"],
+        "companyNewsScore": metrics["companyNewsScore"], 
+        "bearishPercent": metrics["sentiment"]["bearishPercent"],
+        "bullishPercent": metrics["sentiment"]["bullishPercent"],
+        "averageSentimentScore": metrics["averageSentimentScore"],
+        "totalArticles": metrics["totalArticles"]
+    } for symbol, metrics in sentiment_metrics.items()]).sort(
+        ["articlesInLastWeek", "companyNewsScore"], descending=[True, True]
+    )
+
+    # Add fundamental and sector data
+    sector_averages = calculate_sector_averages(sentiment_df, fundamentals_pandas)
+    
+    # Helper function to get fundamental values with proper access to fundamentals_pandas
+    def get_fund_value(symbol, column, default_val=0):
+        return get_fundamental_value(symbol, column, default_val, fundamentals_pandas)
+    
+    sentiment_with_fundamentals = sentiment_df.with_columns([
+        pl.col("symbol").map_elements(
+            lambda x: sector_averages.get(get_fund_value(x, 'Sector', 'Unknown'), {}).get('sectorAverageBullishPercent', 0), 
+            return_dtype=pl.Float64
+        ).alias("sectorAverageBullishPercent"),
+        pl.col("symbol").map_elements(
+            lambda x: sector_averages.get(get_fund_value(x, 'Sector', 'Unknown'), {}).get('sectorAverageNewsScore', 0), 
+            return_dtype=pl.Float64
+        ).alias("sectorAverageNewsScore"),
+        pl.col("symbol").map_elements(
+            lambda x: get_fund_value(x, 'Sector', 'Unknown'), 
+            return_dtype=pl.Utf8
+        ).alias("sector"),
+        pl.col("symbol").map_elements(
+            lambda x: get_fund_value(x, 'Market Cap', 0.0), 
+            return_dtype=pl.Float64
+        ).alias("marketCap"),
+        pl.col("symbol").map_elements(
+            lambda x: get_fund_value(x, 'P/E (trailing)', 0.0), 
+            return_dtype=pl.Float64
+        ).alias("peRatio"),
+        pl.col("symbol").map_elements(
+            lambda x: get_fund_value(x, 'Price', 0.0), 
+            return_dtype=pl.Float64
+        ).alias("price")
+    ])
+
+    # Apply screening filters
+    comprehensive_screened = sentiment_with_fundamentals.filter(
+        (pl.col("articlesInLastWeek") >= min_articles) & 
+        (pl.col("companyNewsScore") >= min_news_score)
+    ).sort(["companyNewsScore", "articlesInLastWeek"], descending=[True, True])
+
+    # Generate sector summary
+    sector_summary = sentiment_with_fundamentals.filter(
+        pl.col("sector") != "Unknown"
+    ).group_by("sector").agg([
+        pl.count("symbol").alias("stock_count"), 
+        pl.mean("companyNewsScore").alias("avg_news_score"),
+        pl.mean("bullishPercent").alias("avg_bullish_percent"), 
+        pl.mean("articlesInLastWeek").alias("avg_articles"),
+        pl.mean("marketCap").alias("avg_market_cap"), 
+        pl.mean("peRatio").alias("avg_pe_ratio")
+    ]).sort("avg_news_score", descending=True)
+
+    # Display results
+    if display_results:
+        print(f"✅ Screened {len(comprehensive_screened)} qualifying stocks across {len(sector_averages)} sectors")
+        print("\n📊 Top Sentiment Stocks:")
+        display(comprehensive_screened.head())
+        print("\n🏢 Sector Analysis:")
+        display(sector_summary)
+
+    return {
+        'comprehensive_screened': comprehensive_screened,
+        'sector_summary': sector_summary,
+        'fundamentals_pandas': fundamentals_pandas,
+        'sentiment_with_fundamentals': sentiment_with_fundamentals
+    }

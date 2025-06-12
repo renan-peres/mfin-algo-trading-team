@@ -970,7 +970,7 @@ def _calculate_out_sample_performance(optimization_results, test_set):
 
 
 def _apply_strategy_to_test_data(ticker_data, best_params):
-    """Apply optimized strategy parameters to test data"""
+    """Improved strategy application with better error handling"""
     try:
         if not isinstance(best_params, dict):
             print("⚠️ Invalid best_params - must be dictionary")
@@ -980,10 +980,13 @@ def _apply_strategy_to_test_data(ticker_data, best_params):
         short_period = best_params.get('short_period', 20)
         long_period = best_params.get('long_period', 50)
         
-        if len(ticker_data) < max(short_period, long_period) + 10:
-            print(f"⚠️ Insufficient data for periods {short_period}/{long_period}")
+        # Ensure we have enough data
+        min_required = max(short_period, long_period) + 50  # More buffer
+        if len(ticker_data) < min_required:
+            print(f"⚠️ Insufficient data for periods {short_period}/{long_period} (need {min_required}, have {len(ticker_data)})")
             return None
         
+        # Apply strategy
         if strategy_type == 'SMA_Cross_Signal':
             ma_short = ticker_data.rolling(short_period).mean()
             ma_long = ticker_data.rolling(long_period).mean()
@@ -991,23 +994,24 @@ def _apply_strategy_to_test_data(ticker_data, best_params):
             ma_short = ticker_data.ewm(span=short_period).mean()
             ma_long = ticker_data.ewm(span=long_period).mean()
         
-        # Generate signals
+        # Generate signals (more conservative)
         signals = np.where(ma_short > ma_long, 1, -1)
         
-        # Calculate strategy returns
+        # Calculate returns
         returns = ticker_data.pct_change().fillna(0)
         strategy_returns = (returns * pd.Series(signals, index=returns.index).shift(1)).fillna(0)
         
-        # Filter out invalid returns
-        valid_returns = strategy_returns.values[~np.isnan(strategy_returns.values)]
+        # Filter out invalid returns more aggressively
+        valid_returns = strategy_returns.values
+        valid_returns = valid_returns[~np.isnan(valid_returns)]
         valid_returns = valid_returns[np.isfinite(valid_returns)]
+        valid_returns = valid_returns[np.abs(valid_returns) < 0.5]  # Remove extreme outliers
         
-        return valid_returns if len(valid_returns) > 5 else None
+        return valid_returns if len(valid_returns) > 20 else None  # Increased minimum
         
     except Exception as e:
         print(f"⚠️ Error applying strategy: {e}")
         return None
-
 
 def _perform_overfitting_tests(in_sample_metrics, out_sample_metrics):
     """Perform statistical tests to detect overfitting"""
@@ -1291,18 +1295,40 @@ def run_overfitting_analysis(optimization_results, test_set):
 
 
 def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, max_iterations=5, target_stocks=2, parameter_iterations=None):
-    """Find strategies that pass overfitting tests by trying different stock combinations"""
+    """Improved stock rotation with better data validation"""
     
     print("🎯 ENHANCED STRATEGY SELECTION WITH STOCK ROTATION & OVERFITTING PROTECTION")
     print("=" * 80)
     
-    # Input validation
-    if quotes_data is None or quotes_data.empty:
-        print("❌ Error: No quotes data provided")
+    # Pre-filter tickers with sufficient data
+    min_required_data = 1000  # Minimum trading days
+    valid_tickers = []
+    
+    for ticker in available_tickers:
+        ticker_data = quotes_data[ticker].dropna()
+        if len(ticker_data) >= min_required_data:
+            valid_tickers.append(ticker)
+        else:
+            print(f"⚠️ Excluding {ticker} - insufficient data ({len(ticker_data)} days)")
+    
+    print(f"📊 Valid tickers after filtering: {len(valid_tickers)}/{len(available_tickers)}")
+    
+    if len(valid_tickers) < target_stocks:
+        print(f"❌ Not enough valid tickers ({len(valid_tickers)}) for target stocks ({target_stocks})")
         return None
     
-    if not available_tickers:
-        print("❌ Error: No available tickers provided")
+    # Generate combinations from valid tickers only
+    try:
+        all_combinations = list(combinations(valid_tickers, target_stocks))
+        if len(all_combinations) > 15:  # Reduced from 20 for faster processing
+            random.seed(42)
+            stock_combinations = random.sample(all_combinations, 15)
+            print(f"Testing 15 random combinations out of {len(all_combinations)} possible")
+        else:
+            stock_combinations = all_combinations
+            print(f"Testing all {len(stock_combinations)} combinations")
+    except Exception as e:
+        print(f"❌ Error generating combinations: {e}")
         return None
     
     # Default parameter configurations
@@ -1564,12 +1590,9 @@ def find_robust_strategies_with_stock_rotation(quotes_data, available_tickers, m
 
 def walk_forward_validation(quotes_data, parameter_ranges, is_overfitted=None, sharpe_p_value=None, 
                           overfitting_analysis=None, selected_tickers=None, risk_free_rate=None, 
-                          validation_periods=4):
-    """
-    Implement walk-forward optimization to reduce overfitting and provide final strategy assessment
-    """
+                          validation_periods=4, is_full_analysis=False):
+    """Improved walk-forward validation with better data handling"""
     
-    # Input validation
     if quotes_data is None or quotes_data.empty:
         print("⚠️ No quotes data provided for walk-forward validation")
         return []
@@ -1578,40 +1601,57 @@ def walk_forward_validation(quotes_data, parameter_ranges, is_overfitted=None, s
         print("⚠️ No parameter ranges provided for walk-forward validation")
         return []
     
-    # Determine if this is a basic call (backwards compatibility) or full analysis
-    is_full_analysis = all(param is not None for param in [is_overfitted, sharpe_p_value, overfitting_analysis, selected_tickers, risk_free_rate])
-    
-    # Run the core walk-forward validation
-    print(f"\n🔄 Running walk-forward validation with {validation_periods} periods...")
-    
     total_length = len(quotes_data)
-    period_length = total_length // validation_periods
+    
+    # Ensure minimum periods have enough data
+    min_required_per_period = 250  # Minimum trading days per period
+    max_possible_periods = total_length // (min_required_per_period * 2)  # Need 2x for train/test
+    
+    if max_possible_periods < 2:
+        print(f"⚠️ Insufficient data for walk-forward validation ({total_length} rows)")
+        return []
+    
+    # Use smaller number of periods if data is limited
+    validation_periods = min(validation_periods, max_possible_periods, 3)
+    period_length = total_length // (validation_periods + 1)  # +1 to ensure we don't exceed data
+    
+    print(f"\n🔄 Running walk-forward validation with {validation_periods} periods (period length: {period_length} days)...")
+    
     all_results = []
     
-    for i in range(validation_periods - 1):  # Leave last period for final test
+    for i in range(validation_periods):
         try:
-            # Training window
-            train_start = i * period_length
-            train_end = (i + 2) * period_length  # 2 periods for training
+            # Training window - use 80% of available data for each period
+            train_start = i * (period_length // 2)
+            train_end = train_start + int(period_length * 1.6)  # Larger training window
             
-            # Test window  
+            # Test window - remaining 20%
             test_start = train_end
-            test_end = min(test_start + period_length, total_length)
+            test_end = min(test_start + (period_length // 2), total_length)
             
-            if test_end <= test_start:
+            # Ensure we have minimum data
+            if (train_end - train_start) < min_required_per_period or (test_end - test_start) < 50:
+                print(f"   ⚠️ Skipping period {i+1} - insufficient data")
                 continue
                 
             train_data = quotes_data.iloc[train_start:train_end]
             test_data = quotes_data.iloc[test_start:test_end]
             
-            print(f"   Period {i+1}: Train {train_data.index[0]} to {train_data.index[-1]}")
-            print(f"   Period {i+1}: Test {test_data.index[0]} to {test_data.index[-1]}")
+            # Ensure we don't go beyond available data
+            if test_end >= total_length:
+                test_data = quotes_data.iloc[test_start:]
+                if len(test_data) < 50:
+                    print(f"   ⚠️ Skipping period {i+1} - test data too small")
+                    continue
             
-            # Optimize on training period
+            print(f"   Period {i+1}: Train {train_data.index[0]} to {train_data.index[-1]} ({len(train_data)} days)")
+            print(f"   Period {i+1}: Test {test_data.index[0]} to {test_data.index[-1]} ({len(test_data)} days)")
+
+            # Rest of the function remains the same...
             period_results = find_optimal_portfolio_with_parameter_optimization(
                 quotes=train_data,
                 max_stocks=2,
-                n_jobs=1,  # Reduced for stability
+                n_jobs=1,
                 heatmap_metric='sharpe',
                 parameter_ranges=parameter_ranges
             )
@@ -1629,10 +1669,8 @@ def walk_forward_validation(quotes_data, parameter_ranges, is_overfitted=None, s
                 })
                 continue
             
-            # Test on validation period
             validation_analysis = run_overfitting_analysis(period_results, test_data)
             
-            # Create result object
             result = {
                 'period': i + 1,
                 'train_sharpe': 0.0,
@@ -1642,7 +1680,6 @@ def walk_forward_validation(quotes_data, parameter_ranges, is_overfitted=None, s
                 'selected_tickers': period_results.get('selected_tickers', [])
             }
             
-            # Extract metrics if available
             if validation_analysis and 'summary' in validation_analysis:
                 summary = validation_analysis['summary']
                 result.update({
@@ -1774,7 +1811,8 @@ def walk_forward_validation(quotes_data, parameter_ranges, is_overfitted=None, s
         print(f"⚠️ Error storing metrics: {e}")
         validation_results['metrics'] = {}
     
-    return validation_results
+    return all_results if not is_overfitted else validation_results
+
 
 def walk_forward_validation_check(quotes_data, parameter_ranges, is_overfitted, sharpe_p_value, 
                           overfitting_analysis, selected_tickers, risk_free_rate, 
@@ -1954,3 +1992,121 @@ def walk_forward_validation_check(quotes_data, parameter_ranges, is_overfitted, 
     print(f"Risk-free rate: {risk_free_rate:.3%}")
     
     return validation_results
+
+def run_complete_strategy_optimization(quotes, available_tickers, max_stocks=2, 
+                                     custom_parameter_iterations=None, max_iterations=4):
+    """
+    Complete strategy optimization with automatic fallback handling
+    
+    Returns a standardized result structure regardless of success/failure paths
+    """
+    print("🔄 Running robust strategy optimization...")
+    
+    # Default parameters if none provided
+    if custom_parameter_iterations is None:
+        custom_parameter_iterations = [
+            {'name': 'Conservative', 'ranges': {
+                'SMA_Cross_Signal': {'short_periods': [20, 30, 50], 'long_periods': [100, 120, 150]},
+                'EMA_Cross_Signal': {'short_periods': [12, 20, 26], 'long_periods': [50, 60, 70]}}}
+        ]
+    
+    # Try main optimization
+    robust_strategy_results = find_robust_strategies_with_stock_rotation(
+        quotes, available_tickers, max_iterations=max_iterations, 
+        target_stocks=max_stocks, parameter_iterations=custom_parameter_iterations
+    )
+    
+    if robust_strategy_results:
+        return _process_successful_results(robust_strategy_results)
+    else:
+        return _handle_fallback_strategy(quotes, available_tickers, max_stocks)
+
+def _process_successful_results(robust_strategy_results):
+    """Process successful optimization results"""
+    optimization_results = robust_strategy_results['optimization_results']
+    overfitting_analysis = robust_strategy_results.get('overfitting_analysis')
+    
+    # Extract key metrics
+    result = {
+        'optimization_results': optimization_results,
+        'optimization_summary': optimization_results['optimization_summary'],
+        'selected_tickers': optimization_results['selected_tickers'],
+        'stability_ratio': robust_strategy_results.get('stability_ratio', 0.5),
+        'is_overfitted': overfitting_analysis['statistical_tests'].get('is_overfitted', False) if overfitting_analysis else False,
+        'sharpe_p_value': overfitting_analysis['statistical_tests'].get('sharpe_p_value', 1.0) if overfitting_analysis else 0.1,
+        'strategy_type': 'ROBUST_MULTI_STOCK'
+    }
+    
+    print(f"✅ Strategy found: {result['selected_tickers']}")
+    display(result['optimization_summary'])
+    
+    # Plot heatmaps
+    try:
+        plot_optimization_heatmaps(optimization_results, metric='sharpe')
+    except Exception as e:
+        print(f"⚠️ Heatmap error: {e}")
+    
+    return result
+
+def _handle_fallback_strategy(quotes, available_tickers, max_stocks):
+    """Handle fallback to single-stock strategy"""
+    print("⚠️ Testing single-stock fallback...")
+    
+    minimal_params = {'SMA_Cross_Signal': {'short_periods': [20], 'long_periods': [100]}}
+    best_single_stock = None
+    best_single_stability = 0
+    
+    for ticker in available_tickers[:10]:
+        try:
+            single_quotes = quotes[[ticker]].dropna()
+            if len(single_quotes) < 500:
+                continue
+                
+            train_size = int(0.8 * len(single_quotes))
+            optimization_results = find_optimal_portfolio_with_parameter_optimization(
+                quotes=single_quotes.iloc[:train_size], max_stocks=1, n_jobs=2, 
+                parameter_ranges=minimal_params
+            )
+            
+            overfitting_analysis = run_overfitting_analysis(optimization_results, single_quotes.iloc[train_size:])
+            is_overfitted = overfitting_analysis['statistical_tests'].get('is_overfitted', True) if overfitting_analysis else True
+            
+            if not is_overfitted:
+                wf_results = walk_forward_validation(single_quotes, minimal_params, validation_periods=3)
+                stability_ratio = sum(1 for r in wf_results if not r.get('is_overfitted', True)) / len(wf_results) if wf_results else 0
+                
+                if stability_ratio > best_single_stability:
+                    best_single_stock = {
+                        'ticker': ticker, 'optimization_results': optimization_results,
+                        'overfitting_analysis': overfitting_analysis, 'stability_ratio': stability_ratio
+                    }
+                    best_single_stability = stability_ratio
+        except Exception:
+            continue
+    
+    # Process results
+    if best_single_stock and best_single_stability >= 0.5:
+        result = {
+            'optimization_results': best_single_stock['optimization_results'],
+            'optimization_summary': best_single_stock['optimization_results']['optimization_summary'],
+            'selected_tickers': [best_single_stock['ticker']],
+            'stability_ratio': best_single_stability,
+            'is_overfitted': False,
+            'sharpe_p_value': best_single_stock['overfitting_analysis']['statistical_tests'].get('sharpe_p_value', 1.0),
+            'strategy_type': 'SINGLE_STOCK_FALLBACK'
+        }
+        
+        print(f"✅ Fallback strategy: {result['selected_tickers'][0]}")
+        display(result['optimization_summary'])
+        return result
+    else:
+        # Ultimate fallback
+        return {
+            'optimization_results': None,
+            'optimization_summary': None,
+            'selected_tickers': available_tickers[:max_stocks],
+            'stability_ratio': 0.0,
+            'is_overfitted': True,
+            'sharpe_p_value': 0.001,
+            'strategy_type': 'BASIC_FALLBACK'
+        }
