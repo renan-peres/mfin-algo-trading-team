@@ -37,3 +37,4 @@ bt
 ta-lib
 textblob==0.19.0
 pytest==8.4.0
+scipy
