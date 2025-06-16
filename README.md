@@ -91,13 +91,12 @@ flowchart TB
     STP --> CP
     
     %% Backtesting & Analysis
-    CP --> BE[📋 Backtesting Engine<br/>Historical Performance Testing]
-    BE --> PA[📊 Performance Analytics<br/>QuantStats Integration<br/>Risk Metrics & Attribution]
-    PA --> PR[📈 Portfolio Reports<br/>Benchmark Comparison<br/>Monte Carlo Analysis]
-    
+    CP --> BE["📈 Bechmark Selection<br/>(Regression Analysis)"]
+    BE --> PR["📋 Backtesting<br/>(Historical Performance)"]
+
     %% Automation
-    PR --> AP[🤖 Automated Pipelines<br/>Weekly/Monthly Execution]
-    AP --> RM[⚠️ Risk Monitoring<br/>Drawdown Alerts<br/>Performance Tracking]
+    PR --> AP["🤖 Automated Pipelines<br/>(Weekly | Quarterly Execution)"]
+    PR --> RM["⚠️ Risk Management<br/>(Performance Tracking)"]
     
     %% Improved Styling with Better Contrast
     style DS fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000000
@@ -121,7 +120,6 @@ flowchart TB
     %% Combined flow styling
     style CP fill:#b3e5fc,stroke:#0288d1,stroke-width:3px,color:#000000
     style BE fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#000000
-    style PA fill:#ffe0b2,stroke:#f57c00,stroke-width:2px,color:#000000
     style PR fill:#f8bbd9,stroke:#c2185b,stroke-width:3px,color:#000000
     style AP fill:#e0e0e0,stroke:#424242,stroke-width:2px,color:#000000
     style RM fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000000
@@ -148,7 +146,6 @@ flowchart TB
     subgraph Analytics[" "]
         direction TB
         BE
-        PA
         PR
         AP
         RM
