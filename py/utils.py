@@ -31,9 +31,6 @@ def load_and_filter_data(file_path, tickers, start_date, end_date):
 
     # Filter columns to available tickers
     available_tickers = [ticker for ticker in tickers if ticker in df.columns]
-    print(f"Found {len(available_tickers)} of {len(tickers)} tickers in {file_path}")
-    print(f"Missing tickers: {[ticker for ticker in tickers if ticker not in df.columns]}")
-
     columns_to_keep = ['Date'] + available_tickers if 'Date' in df.columns else available_tickers
     df = df[columns_to_keep] if all(col in df.columns for col in columns_to_keep) else df
 
